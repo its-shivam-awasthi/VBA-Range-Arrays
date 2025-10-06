@@ -39,7 +39,7 @@ A robust and extensible VBA framework for managing, indexing, filtering, and tra
 
 ```vba
 Dim rngManager As New RangeArray
-rngManager.ArraysFromRanges "SalesData", "A1:D100", , , vbCurrentregion, True, vbRowHeade
+rngManager.ArraysFromRanges "SalesData", "A1:D100", , , vbCurrentregion, True
 ```
 
 ### Access and Manipulate Array
