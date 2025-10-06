@@ -32,26 +32,26 @@
 
 - Load Excel Range into Array
 
-```Dim rngManager As New RangeArray```
-```rngManager.ArraysFromRanges "SalesData", "A1:D100", , , vbCurrentregion, True, vbRowHeader```
+<pre><code>````Dim rngManager As New RangeArray```</code></pre>
+<pre><code>````rngManager.ArraysFromRanges "SalesData", "A1:D100", , , vbCurrentregion, True, vbRowHeader```</code></pre>
 
 - Access and Manipulate Array
 
-```Dim arrObj As Arrays```
-```Set arrObj = rngManager.Arrays("SalesData")```
+<pre><code>````Dim arrObj As Arrays```</code></pre>
+<pre><code>````Set arrObj = rngManager.Arrays("SalesData")```</code></pre>
 
-```Debug.Print arrObj.Dimension```
-```Debug.Print arrObj.CellValue(2, 3)```
+<pre><code>````Debug.Print arrObj.Dimension```</code></pre>
+<pre><code>````Debug.Print arrObj.CellValue(2, 3)```</code></pre>
 
 - Filter Array by Criteria
 
-```arrObj.Filter ">1000", 3, xlByRows, vbAutoDetect```
+<pre><code>````arrObj.Filter ">1000", 3, xlByRows, vbAutoDetect```</code></pre>
 
 - Export Back to Excel
 
-```Dim targetRange As Range```
-```Set targetRange = Sheet1.Range("F1")```
-```rngManager.ExportToRange "SalesData", targetRange```
+<pre><code>````Dim targetRange As Range```</code></pre>
+<pre><code>````Set targetRange = Sheet1.Range("F1")```</code></pre>
+<pre><code>````rngManager.ExportToRange "SalesData", targetRange```</code></pre>
 
 ## 📚 Requirements
 
