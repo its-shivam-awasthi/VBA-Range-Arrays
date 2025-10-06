@@ -110,5 +110,4 @@ RngManager.ExportToRange "SalesData", targetRange
 - Badges (build status, license, version)
 - Contributor guidelines
 - Sample files or templates
-- A changelog or GitHub Actions workflow for CI/C
 
