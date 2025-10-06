@@ -4,6 +4,6 @@ A VBA library where I intend to make Pandas-like functionality on VBA 2D arrays,
 The current Class Modules are still being written and may cause some unexpected errors.
 
 
-Future Plan
+Future Plans: 
 Add Support for Headers.
 Making the class more dynamic and optimised for large datasets.
