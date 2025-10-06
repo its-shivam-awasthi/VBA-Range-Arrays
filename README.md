@@ -77,7 +77,7 @@ RngManager.ExportToRange "SalesData", targetRange
 
 ---
 
-##🔭 Roadmap & Future Plans
+## 🔭 Roadmap & Future Plans
 
 ### Here’s what’s coming next:
 
