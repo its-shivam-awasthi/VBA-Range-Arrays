@@ -15,7 +15,7 @@ A robust and extensible VBA framework for managing, indexing, filtering, and tra
   
   - Index-based filtering, slicing, and cell-level access
 
-  - Centralised Array Management via Arrays
+- Centralised Array Management via Arrays
   
   - Dictionary-based reference system for multiple arrays
 
@@ -23,13 +23,15 @@ A robust and extensible VBA framework for managing, indexing, filtering, and tra
 
   - Type-checking: numeric, text, date, boolean, jagged arrays
 
-  - Excel Range Integration via RangeArray
+- Excel Range Integration via RangeArray
 
   - Convert Excel ranges to arrays with header trimming
 
   - Export arrays back to Excel ranges
 
   -  Metadata tracking: workbook, worksheet, and range address
+
+---
 
 ## 🛠️ Usage
 
@@ -79,15 +81,15 @@ RngManager.ExportToRange "SalesData", targetRange
 
 ### Here’s what’s coming next:
 
-- Header-Aware IndexingSupport for named headers and automatic mapping of header labels to column indexes.
+- Header-Aware Indexing: Support for named headers and automatic mapping of header labels to column indexes.
 
-- Dynamic Indexing EnhancementsSmarter row/column selection using conditions, labels, and expressions.
+- Dynamic Indexing Enhancements: Smarter row/column selection using conditions, labels, and expressions.
 
-- Large Dataset OptimizationPerformance tuning for arrays with thousands of rows—minimizing memory and CPU overhead.
+- Large Dataset Optimisation: Performance tuning for arrays with thousands of rows—minimising memory and CPU overhead.
 
-- Flexible Filtering & IFS LogicSupport for multi-condition filters, nested logic, and IFS-style output arrays.
+- Flexible Filtering & IFS Logic: Support for multi-condition filters, nested logic, and IFS-style output arrays.
 
-- Improved Error Handling & DebuggingMore descriptive error messages and optional debug logging.
+- Improved Error Handling & Debugging: More descriptive error messages and optional debug logging.
 
 
 ---
