@@ -35,8 +35,10 @@ A robust and extensible VBA framework for managing, indexing, filtering, and tra
 
 ### Load Excel Range into Array
 
-<pre><code>```Dim rngManager As New RangeArray```</code></pre>
-<pre><code>```rngManager.ArraysFromRanges "SalesData", "A1:D100", , , vbCurrentregion, True, vbRowHeade```</code></pre>
+```vba
+Dim rngManager As New RangeArray
+rngManager.ArraysFromRanges "SalesData", "A1:D100", , , vbCurrentregion, True, vbRowHeade
+```
 
 - Access and Manipulate Array
 
@@ -98,8 +100,13 @@ RngManager.ExportToRange "SalesData", targetRange
 ---
 
 ## 📄 License
+- MIT License - Feel free to use, modify, and distribute.
 
-- MIT License.
--  Feel free to use, modify, and distribute.
+---
 
-- Let me know if you'd like to add badges, contributor guidelines, or sample files to this README. I can also help you write a changelog or GitHub Actions workflow if you're planning CI/CD.
+ Let me know if you'd like help adding:
+- Badges (build status, license, version)
+- Contributor guidelines
+- Sample files or templates
+- A changelog or GitHub Actions workflow for CI/C
+
