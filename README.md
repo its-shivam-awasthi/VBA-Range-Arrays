@@ -40,7 +40,7 @@ Dim rngManager As New RangeArray
 rngManager.ArraysFromRanges "SalesData", "A1:D100", , , vbCurrentregion, True, vbRowHeade
 ```
 
-- Access and Manipulate Array
+### Access and Manipulate Array
 
 ```vba
 Dim arrObj As Arrays
@@ -50,12 +50,12 @@ Debug.Print arrObj.Dimension
 Debug.Print arrObj.CellValue(2, 3)
 ```
 
-- Filter Array by Criteria
+### Filter Array by Criteria
 
 ```vba
 arrObj.Filter ">1000", 3, xlByRows, vbAutoDetect
 ```
-- Export Back to Excel
+### Export Back to Excel
 
 ```vba
 Dim targetRange As Range
