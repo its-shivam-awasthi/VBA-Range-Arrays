@@ -19,6 +19,8 @@ Public Enum vbMatchMode
     vbTextDoesNotContains = 3
     vbTextStartsWith = 4
     vbTextEndsWith = 5
+    vbTextWildcard = 6
+    vbTextRegex = 7
     'Numbers
     vbNumberEquals = 11
     vbNumberNotEqual = 12
@@ -29,6 +31,7 @@ Public Enum vbMatchMode
     vbNumberBetween = 16
     'Logic
     VbVarType = 21
+    vbIsFunction = 22
 End Enum
 
 Public Enum vbConversionType
@@ -64,6 +67,11 @@ End Enum
 Public Enum vbFilterLogic
     vbLogicAnd = 1
     vbLogicOr = 2
+End Enum
+
+Public Enum vbUserSortMethod
+    vbUserQuickSort = 0
+    vbUserMergeSort = 1
 End Enum
 
 Private C_Dict As Object
@@ -112,8 +120,8 @@ Public Property Get RefArray(Optional Ref As Variant) As Variant
     End If
 End Property
 
-Public Property Get Arr(Ref As Variant) As Arrays
-    Set Arr = UseRef(Ref)
+Public Property Get arr(Ref As Variant) As Arrays
+    Set arr = UseRef(Ref)
 End Property
 
 Public Property Get AllRefs() As Variant
@@ -181,12 +189,12 @@ Public Property Get LastRowIndex() As Long
     LastRowIndex = UBound(C_Arr, 1)
 End Property
 
-Public Property Get FirstColumnIndex() As Long
-    FirstColumnIndex = LBound(C_Arr, 2)
+Public Property Get FirstColIndex() As Long
+    FirstColIndex = LBound(C_Arr, 2)
 End Property
 
-Public Property Get LastColumnIndex() As Long
-    LastColumnIndex = UBound(C_Arr, 2)
+Public Property Get LastColIndex() As Long
+    LastColIndex = UBound(C_Arr, 2)
 End Property
 
 Public Property Get Indexes() As ArrayIndexes
@@ -201,7 +209,7 @@ Public Property Get RowCount() As Long
 End Property
 
 Public Property Get ColumnCount() As Long
-    ColumnCount = LastColumnIndex - FirstColumnIndex + 1
+    ColumnCount = LastColIndex - FirstColIndex + 1
 End Property
 
 ' Get Dimension
@@ -428,21 +436,21 @@ Public Function IsNumericArray(Optional Ref As Variant) As Boolean
     On Error GoTo 0
 End Function
 
-Public Function IsJaggedArray(ByVal Arr As Variant) As Boolean
+Public Function IsJaggedArray(ByVal arr As Variant) As Boolean
     Dim i As Long, baseCols As Long
 
-    If Not IsArray(Arr) Then
+    If Not IsArray(arr) Then
         IsJaggedArray = False
         Exit Function
     End If
 
     On Error Resume Next
     baseCols = -1
-    For i = LBound(Arr) To UBound(Arr)
-        If IsArray(Arr(i)) Then
+    For i = LBound(arr) To UBound(arr)
+        If IsArray(arr(i)) Then
             If baseCols = -1 Then
-                baseCols = UBound(Arr(i)) - LBound(Arr(i)) + 1
-            ElseIf (UBound(Arr(i)) - LBound(Arr(i)) + 1) <> baseCols Then
+                baseCols = UBound(arr(i)) - LBound(arr(i)) + 1
+            ElseIf (UBound(arr(i)) - LBound(arr(i)) + 1) <> baseCols Then
                 IsJaggedArray = True
                 Exit Function
             End If
@@ -517,7 +525,7 @@ Public Property Get Rows(Optional ByVal Index As Variant, Optional ByVal InvertM
     Dim RowIndexes() As Variant
     Dim selectedRows As Object
     Dim ArrIndex As ArrayIndexes
-    Dim coll As New Collection
+    Dim Coll As New Collection
 
     ' Default to full range if Index is missing
     If IsMissing(Index) Then
@@ -548,21 +556,22 @@ Public Property Get Rows(Optional ByVal Index As Variant, Optional ByVal InvertM
 
         If includeRow Then
             Set ArrIndex = New ArrayIndexes
+            Set ArrIndex.ParentArrays = Me
             ArrIndex.InitialArray = Me.CurrentArray
             ArrIndex.RowIndexes = Array(i)
-            coll.Add ArrIndex
+            Coll.Add ArrIndex
         End If
     Next i
 
-    Set Rows = coll
+    Set Rows = Coll
 End Property
 
 Public Property Get Columns(Optional ByVal Index As Variant, Optional ByVal InvertMatch As Boolean = False) As Collection
     Dim i As Long
-    Dim ColIndexes() As Variant
+    Dim colIndexes() As Variant
     Dim selectedCols As Object
     Dim ArrIndex As ArrayIndexes
-    Dim coll As New Collection
+    Dim Coll As New Collection
 
     ' Default to full range if Index is missing
     If IsMissing(Index) Then
@@ -570,18 +579,18 @@ Public Property Get Columns(Optional ByVal Index As Variant, Optional ByVal Inve
     End If
 
     ' Normalize input to array
-    ColIndexes = NormalizeToArray(Index)
+    colIndexes = NormalizeToArray(Index)
 
     ' Validate and collect selected column indexes
     Set selectedCols = VBA.CreateObject("Scripting.Dictionary")
-    For i = LBound(ColIndexes) To UBound(ColIndexes)
-        If ColIndexes(i) < 1 Or ColIndexes(i) > UBound(C_Arr, 2) Then
+    For i = LBound(colIndexes) To UBound(colIndexes)
+        If colIndexes(i) < 1 Or colIndexes(i) > UBound(C_Arr, 2) Then
             Err.Raise vbObjectError + 2002, , "Column index out of bounds."
         End If
-        If selectedCols.Exists(ColIndexes(i)) Then
+        If selectedCols.Exists(colIndexes(i)) Then
             Err.Raise vbObjectError + 2052, , "Duplicate column indexes."
         Else
-            selectedCols.Add ColIndexes(i), True
+            selectedCols.Add colIndexes(i), True
         End If
     Next i
 
@@ -593,20 +602,20 @@ Public Property Get Columns(Optional ByVal Index As Variant, Optional ByVal Inve
 
         If includeCol Then
             Set ArrIndex = New ArrayIndexes
+            Set ArrIndex.ParentArrays = Me
             ArrIndex.InitialArray = Me.CurrentArray
             ArrIndex.ColumnIndexes = Array(i)
-            coll.Add ArrIndex
+            Coll.Add ArrIndex
         End If
     Next i
 
-    Set Columns = coll
+    Set Columns = Coll
 End Property
 
 Public Property Get Region(startIndex As Variant, endIndex As Variant) As Arrays
     Dim i As Long, j As Long
-    Dim resultArr() As Variant
-    Dim arrObj As New Arrays
-    Dim dict As Object
+    Dim ArrIndex As New ArrayIndexes
+    Dim RowIndexes As Variant, colIndexes As Variant
     Dim startRow As Long, startCol As Long, endRow As Long, endCol As Long
 
     If Not IsArray(C_Arr) Then
@@ -631,28 +640,25 @@ Public Property Get Region(startIndex As Variant, endIndex As Variant) As Arrays
         Err.Raise vbObjectError + 2123, , "Region bounds out of range."
     End If
 
-    ReDim resultArr(1 To endRow - startRow + 1, 1 To endCol - startCol + 1)
+    RowIndexes = NormalizeToArray(startRow & ":" & endRow)
+    colIndexes = NormalizeToArray(startCol & ":" & endCol)
 
-    For i = startRow To endRow
-        For j = startCol To endCol
-            resultArr(i - startRow + 1, j - startCol + 1) = C_Arr(i, j)
-        Next j
-    Next i
-
-    Set dict = CreateObject("Scripting.Dictionary")
-    dict.Add C_Ref, resultArr
-
-    Set arrObj.Arrays = dict
-    arrObj.UseRef C_Ref
-    Set Region = arrObj
+    Set ArrIndex.ParentArrays = Me
+    ArrIndex.InitialArray = Me.CurrentArray
+    ArrIndex.RowIndexes = RowIndexes
+    ArrIndex.ColumnIndexes = colIndexes
+    
+    Set Region = ArrIndex
+    
 End Property
 
-Public Property Get Areas(ByVal regionSpecs As Variant) As Arrays
-    Dim i As Long, r As Long, c As Long
+Public Property Get Areas(ByVal regionSpecs As Variant) As Collection
+    Dim i As Long
     Dim Region As Variant
-    Dim resultArr() As Variant
-    Dim dict As Object
-    Dim arrObj As New Arrays
+    Dim ArrIndex As ArrayIndexes
+    Dim Coll As New Collection
+    Dim RowIndexes As Variant, colIndexes As Variant
+    Dim startRow As Long, startCol As Long, endRow As Long, endCol As Long
 
     If Not IsArray(C_Arr) Then
         Err.Raise vbObjectError + 2130, , "Array not initialized."
@@ -662,41 +668,38 @@ Public Property Get Areas(ByVal regionSpecs As Variant) As Arrays
         Err.Raise vbObjectError + 2131, , "Areas expects an array of region specifications."
     End If
 
-    Set dict = CreateObject("Scripting.Dictionary")
-
     For i = LBound(regionSpecs) To UBound(regionSpecs)
         Region = regionSpecs(i)
         If Not IsArray(Region) Or UBound(Region) <> 3 Then
-            Err.Raise vbObjectError + 2132, , "Each region must be an array of 4 elements: startRow, startCol, endRow, endCol."
+            Err.Raise vbObjectError + 2132, , "Each region must be an array of 4 elements: startRow,startCol,endRow,endCol."
         End If
 
-        Dim startRow As Long: startRow = Region(0)
-        Dim startCol As Long: startCol = Region(1)
-        Dim endRow As Long: endRow = Region(2)
-        Dim endCol As Long: endCol = Region(3)
-
+        startRow = Region(0)
+        startCol = Region(1)
+        endRow = Region(2)
+        endCol = Region(3)
         If startRow < 1 Or endRow > UBound(C_Arr, 1) Or startCol < 1 Or endCol > UBound(C_Arr, 2) Then
             Err.Raise vbObjectError + 2133, , "Region bounds out of range."
         End If
 
-        ReDim resultArr(1 To endRow - startRow + 1, 1 To endCol - startCol + 1)
-        For r = startRow To endRow
-            For c = startCol To endCol
-                resultArr(r - startRow + 1, c - startCol + 1) = C_Arr(r, c)
-            Next c
-        Next r
+        RowIndexes = NormalizeToArray(startRow & ":" & endRow)
+        colIndexes = NormalizeToArray(startCol & ":" & endCol)
 
-        dict.Add i + 1, resultArr ' Using 1-based keys for consistency
+        Set ArrIndex = New ArrayIndexes
+        Set ArrIndex.ParentArrays = Me
+        ArrIndex.InitialArray = Me.CurrentArray
+        ArrIndex.RowIndexes = RowIndexes
+        ArrIndex.ColumnIndexes = colIndexes
+        Coll.Add ArrIndex
     Next i
 
-    Set arrObj.Arrays = dict
-    arrObj.UseRef C_Ref
-    Set Areas = arrObj
+    Set Areas = Coll
+    
 End Property
 
-Public Sub Filter(criteria As Variant, pos As Long, _
+Public Sub Filter(criteria As Variant, Field As Long, _
     Optional FilterMethod As XlSearchOrder = xlByRows, _
-    Optional MatchMode As Variant = vbTextEquals, _
+    Optional matchmode As Variant = vbTextEquals, _
     Optional CompareMethod As VbCompareMethod = vbBinaryCompare, _
     Optional Not_Found As Variant)
 
@@ -712,7 +715,7 @@ Public Sub Filter(criteria As Variant, pos As Long, _
     Select Case FilterMethod
         Case xlByRows
             For i = LBound(C_Arr, 1) To UBound(C_Arr, 1)
-                If IsMatch(C_Arr(i, pos), criteria, MatchMode, CompareMethod) Then n = n + 1: dict.Add n, i
+                If IsMatch(C_Arr(i, Field), criteria, matchmode, CompareMethod) Then n = n + 1: dict.Add n, i
             Next i
 
             If n > 0 Then
@@ -726,7 +729,7 @@ Public Sub Filter(criteria As Variant, pos As Long, _
 
         Case xlByColumns
             For j = LBound(C_Arr, 2) To UBound(C_Arr, 2)
-                If IsMatch(C_Arr(pos, j), criteria, MatchMode, CompareMethod) Then n = n + 1: dict.Add n, j
+                If IsMatch(C_Arr(Field, j), criteria, matchmode, CompareMethod) Then n = n + 1: dict.Add n, j
             Next j
 
             If n > 0 Then
@@ -746,15 +749,15 @@ Public Sub Filter(criteria As Variant, pos As Long, _
     If C_Ref <> "" Then
         If n = 0 Then
             If IsMissing(Not_Found) Then
-                C_Dict(C_Ref) = Array()
+                C_Arr = Array()
             Else
-                C_Dict(C_Ref) = Not_Found
+                C_Arr = Not_Found
             End If
         Else
-            C_Dict(C_Ref) = ReturnArray
+            C_Arr = ReturnArray
         End If
     End If
-
+    C_Dict(C_Ref) = C_Arr
 End Sub
 
 Private Function ParseCondition(ByVal condition As String, ByRef op As String, ByRef operand As Variant) As Boolean
@@ -762,29 +765,68 @@ Private Function ParseCondition(ByVal condition As String, ByRef op As String, B
     operators = Array("<=", ">=", "<>", "=", "<", ">")
 
     For i = LBound(operators) To UBound(operators)
-        If Left(condition, Len(operators(i))) = operators(i) Then
+        If left(condition, Len(operators(i))) = operators(i) Then
             op = operators(i)
-            operand = Trim(Mid(condition, Len(op) + 1))
+            operand = Trim(mid(condition, Len(op) + 1))
             ParseCondition = True
             Exit Function
         End If
     Next i
 
-    ' Default to "=" if no operator found
-    op = "="
-    operand = condition
-    ParseCondition = True
+    ParseCondition = False
     
 End Function
 
-Private Function IsMatch(ByVal Value As Variant, ByVal criteria As Variant, _
-                         ByVal MatchMode As Variant, _
-                         Optional CompareMethod As VbCompareMethod = vbBinaryCompare) As Boolean
-
-    ' Auto-detect match mode from string condition like ">100", "<>A", etc.
-    Dim op As String, operand As Variant
-    If MatchMode = vbAutoDetect And VarType(criteria) = vbString Then
-        If ParseCondition(CStr(criteria), op, operand) Then
+Private Function IsMatch(ByVal Value As Variant, _
+                         ByVal criteria As Variant, _
+                         ByVal matchmode As Variant, _
+                         Optional CompareMethod As VbCompareMethod = vbBinaryCompare, _
+                         Optional reCache As Object = Nothing) As Boolean
+    Dim strValue As String, strCriteria As String
+    Dim i As Long
+    
+    ' Null safety
+    If IsNull(Value) Then
+        strValue = ""
+    Else
+        strValue = CStr(Value)
+    End If
+    
+    ' Handle multiple criteria (OR logic)
+    If IsArray(criteria) Then
+        If matchmode = vbNumberBetween Then
+            If UBound(criteria) = 1 Then
+                IsMatch = (Value >= criteria(0) And Value <= criteria(1))
+                Exit Function
+            Else
+                IsMatch = False
+                Exit Function
+            End If
+        End If
+        
+        For i = LBound(criteria) To UBound(criteria)
+            Dim singleCriteria As Variant
+            singleCriteria = criteria(i)
+            If IsMatch(Value, singleCriteria, matchmode, CompareMethod, reCache) Then
+                IsMatch = True
+                Exit Function
+            End If
+        Next i
+        IsMatch = False
+        Exit Function
+    End If
+    
+    ' Convert single criteria safely
+    If IsNull(criteria) Then
+        strCriteria = ""
+    Else
+        strCriteria = CStr(criteria)
+    End If
+    
+    ' Auto-detect logic
+    If matchmode = vbAutoDetect And VarType(criteria) = vbString Then
+        Dim op As String, operand As Variant
+        If ParseCondition(strCriteria, op, operand) Then
             Select Case op
                 Case "=": IsMatch = (Value = operand)
                 Case "<>": IsMatch = (Value <> operand)
@@ -792,87 +834,89 @@ Private Function IsMatch(ByVal Value As Variant, ByVal criteria As Variant, _
                 Case "<": IsMatch = (Value < operand)
                 Case ">=": IsMatch = (Value >= operand)
                 Case "<=": IsMatch = (Value <= operand)
-                Case Else: Err.Raise vbObjectError + 3001, , "Invalid operator: " & op
             End Select
             Exit Function
         End If
-        MatchMode = vbTextEquals 'Deafult to string equals if criteria was not an string
+        matchmode = IIf(IsNumeric(Value), vbNumberEquals, vbTextEquals)
     End If
-                              
-    ' Fallback to enum-based logic
-    Dim strValue As String, strCriteria As String
-    strValue = CStr(Value)
-    strCriteria = CStr(criteria)
     
-    Select Case MatchMode
-        ' Text comparisons
-        Case vbTextEquals
+    ' Main logic using Select Case True for speed
+    Select Case True
+        Case matchmode = vbTextEquals
             IsMatch = (StrComp(strValue, strCriteria, CompareMethod) = 0)
-        Case vbTextNotEqual
+        Case matchmode = vbTextNotEqual
             IsMatch = (StrComp(strValue, strCriteria, CompareMethod) <> 0)
-        Case vbTextContains
+        Case matchmode = vbTextContains
             IsMatch = (InStr(1, strValue, strCriteria, CompareMethod) > 0)
-        Case vbTextDoesNotContains
+        Case matchmode = vbTextDoesNotContains
             IsMatch = (InStr(1, strValue, strCriteria, CompareMethod) = 0)
-        Case vbTextStartsWith
-            If Len(strValue) >= Len(strCriteria) Then
-                IsMatch = (StrComp(Left(strValue, Len(strCriteria)), strCriteria, CompareMethod) = 0)
+        Case matchmode = vbTextStartsWith
+            IsMatch = (Len(strValue) >= Len(strCriteria) And _
+                       StrComp(left(strValue, Len(strCriteria)), strCriteria, CompareMethod) = 0)
+        Case matchmode = vbTextEndsWith
+            IsMatch = (Len(strValue) >= Len(strCriteria) And _
+                       StrComp(right(strValue, Len(strCriteria)), strCriteria, CompareMethod) = 0)
+        Case matchmode = vbTextWildcard
+            IsMatch = (strValue Like strCriteria)
+        Case matchmode = vbTextRegex
+            Dim re As Object
+            If reCache Is Nothing Then
+                Set re = CreateObject("VBScript.RegExp")
+                re.Pattern = strCriteria
+                re.IgnoreCase = (CompareMethod = vbTextCompare)
+                re.Global = False
+                Set reCache = re
             Else
-                IsMatch = False
+                Set re = reCache
             End If
-        Case vbTextEndsWith
-            If Len(strValue) >= Len(strCriteria) Then
-                IsMatch = (StrComp(Right(strValue, Len(strCriteria)), strCriteria, CompareMethod) = 0)
-            Else
-                IsMatch = False
-            End If
-
-        ' Numeric comparisons
-        Case vbNumberEquals
+            IsMatch = re.Test(strValue)
+        Case matchmode = vbNumberEquals
             IsMatch = (Value = criteria)
-        Case vbNumberNotEqual
+        Case matchmode = vbNumberNotEqual
             IsMatch = (Value <> criteria)
-        Case vbNumberGreaterThan
+        Case matchmode = vbNumberGreaterThan
             IsMatch = (Value > criteria)
-        Case vbNumberGreaterThanOrEqual
+        Case matchmode = vbNumberGreaterThanOrEqual
             IsMatch = (Value >= criteria)
-        Case vbNumberLessThan
+        Case matchmode = vbNumberLessThan
             IsMatch = (Value < criteria)
-        Case vbNumberLessThanOrEqual
+        Case matchmode = vbNumberLessThanOrEqual
             IsMatch = (Value <= criteria)
-        Case vbNumberBetween
-            If IsArray(criteria) And UBound(criteria) = 1 Then
-                IsMatch = (Value >= criteria(0) And Value <= criteria(1))
-            Else
-                Err.Raise vbObjectError + 2025, , "Criteria for vbNumberBetween must be a 2-element 1D-array"
-            End If
-        ' Logic
-        Case VbVarType
+        Case matchmode = VbVarType
             IsMatch = (VarType(Value) = criteria)
+        Case matchmode = vbIsFunction
+            Select Case LCase(strCriteria)
+                Case "isdate": IsMatch = IsDate(Value)
+                Case "isempty": IsMatch = IsEmpty(Value)
+                Case "iserror": IsMatch = IsError(Value)
+                Case "isnull": IsMatch = IsNull(Value)
+                Case "isnumeric": IsMatch = IsNumeric(Value)
+                Case Else: IsMatch = False
+            End Select
         Case Else
-            Err.Raise vbObjectError + 2024, , "Invalid Match Mode"
+            IsMatch = False
     End Select
 End Function
-    
-Public Sub Transpose()
+
+Public Sub TransFielde()
     
     Dim i As Long, j As Long
-    Dim transposedArr() As Variant
+    Dim transFieldedArr() As Variant
     
     If Not IsArray(C_Arr) Then
         Err.Raise vbObjectError + 2024, , "Array not initialized."
     End If
     
-    ReDim transposedArr(LBound(C_Arr, 2) To UBound(C_Arr, 2), LBound(C_Arr, 1) To UBound(C_Arr, 1))
+    ReDim transFieldedArr(LBound(C_Arr, 2) To UBound(C_Arr, 2), LBound(C_Arr, 1) To UBound(C_Arr, 1))
     
     For i = LBound(C_Arr, 1) To UBound(C_Arr, 1)
         For j = LBound(C_Arr, 2) To UBound(C_Arr, 2)
-            transposedArr(j, i) = C_Arr(i, j)
+            transFieldedArr(j, i) = C_Arr(i, j)
         Next j
     Next i
     
     ' Update internal array and dictionary
-    C_Arr = transposedArr
+    C_Arr = transFieldedArr
     If C_Ref <> "" Then
         C_Dict(C_Ref) = C_Arr
     End If
@@ -977,7 +1021,7 @@ Public Sub AppendRows(ByVal NewData As Variant)
     If C_Ref <> "" Then C_Dict(C_Ref) = C_Arr
 End Sub
 
-Public Sub AppendColumns(ByVal NewData As Variant)
+Public Sub AppendCols(ByVal NewData As Variant)
     Dim newArr() As Variant
     Dim i As Long, j As Long
     Dim newCols As Long, newRows As Long
@@ -990,7 +1034,7 @@ Public Sub AppendColumns(ByVal NewData As Variant)
     End If
     
     If Not IsArray(NewData) Then
-        ReDim newArr(UBound(C_Arr, 1) To UBound(C_Arr, 1), 1 To 1)
+        ReDim newArr(LBound(C_Arr, 1) To UBound(C_Arr, 1), 1 To 1)
         For i = LBound(C_Arr, 1) To UBound(C_Arr, 1)
             newArr(i, 1) = NewData
         Next i
@@ -1048,7 +1092,7 @@ Public Sub Union(Ref_Args As Variant)
     End If
 End Sub
 
-Public Sub InsertRow(ByVal Index As Long, ByVal NewRow As Variant)
+Public Sub InsertRow(ByVal Index As Long, ByVal newRow As Variant)
     Dim i As Long, j As Long
     Dim totalRows As Long, totalCols As Long, insertAt As Long
     Dim resultArr() As Variant, NewRowArr As Variant
@@ -1069,13 +1113,13 @@ Public Sub InsertRow(ByVal Index As Long, ByVal NewRow As Variant)
         Err.Raise vbObjectError + 2034, , "Row index out of bounds."
     End If
 
-    If Not IsArray(NewRow) Then
+    If Not IsArray(newRow) Then
         ReDim NewRowArr(1 To 1, c1 To c2)
         For j = LBound(C_Arr, 2) To UBound(C_Arr, 2)
-            NewRowArr(1, j) = NewRow
+            NewRowArr(1, j) = newRow
         Next j
     Else
-        NewRowArr = Convert2D(NewRow, vbToRow)
+        NewRowArr = Convert2D(newRow, vbToRow)
     End If
 
     n = UBound(NewRowArr, 1) - LBound(NewRowArr, 1) + 1
@@ -1112,7 +1156,7 @@ Public Sub InsertRow(ByVal Index As Long, ByVal NewRow As Variant)
     If C_Ref <> "" Then C_Dict(C_Ref) = C_Arr
 End Sub
 
-Public Sub InsertCol(ByVal Index As Long, ByVal NewCol As Variant)
+Public Sub InsertCol(ByVal Index As Long, ByVal newCol As Variant)
     Dim i As Long, j As Long
     Dim totalRows As Long, totalCols As Long, InsertColAt
     Dim resultArr() As Variant, NewColArr As Variant
@@ -1133,13 +1177,13 @@ Public Sub InsertCol(ByVal Index As Long, ByVal NewCol As Variant)
         Err.Raise vbObjectError + 2037, , "Column index out of bounds."
     End If
     
-    If Not IsArray(NewCol) Then
+    If Not IsArray(newCol) Then
         ReDim NewColArr(r1 To r2, 1 To 1)
         For i = LBound(C_Arr, 1) To UBound(C_Arr, 1)
-            NewColArr(i, 1) = NewCol
+            NewColArr(i, 1) = newCol
         Next i
     Else
-        NewColArr = Convert2D(NewCol, vbToCol)
+        NewColArr = Convert2D(newCol, vbToCol)
     End If
     
     n = UBound(NewColArr, 2) - LBound(NewColArr, 2) + 1
@@ -1176,22 +1220,24 @@ Public Sub InsertCol(ByVal Index As Long, ByVal NewCol As Variant)
     If C_Ref <> "" Then C_Dict(C_Ref) = resultArr
 End Sub
 
-Public Sub InsertMultipleRows(Indexes() As Long, RowData() As Variant)
-    Dim i As Long, j As Long
+Public Sub InsertMultipleRows(Indexes As Variant, RowData As Variant)
+    Dim IndexArr As Variant
+    Dim i As Long, j As Long, k As Long
     Dim totalRows As Long, totalCols As Long
     Dim r1 As Long, r2 As Long, c1 As Long, c2 As Long
     Dim insertCount As Long
     Dim resultArr() As Variant
     Dim insertMap As Object: Set insertMap = CreateObject("Scripting.Dictionary")
-    Dim newRows() As Variant
-    Dim rowOffset As Long
-
+    Dim RowCount As Long
+    
     If Not IsArray(C_Arr) Then
-        Err.Raise vbObjectError + 2040, , "Target array is not initialized."
+        Err.Raise vbObjectError + 2050, , "Target array is not initialized."
     End If
 
-    If UBound(Indexes) <> UBound(RowData) Then
-        Err.Raise vbObjectError + 2041, , "Indexes and RowData arrays must have the same length."
+    IndexArr = NormalizeToArray(Indexes)
+
+    If UBound(IndexArr) <> UBound(RowData) Then
+        Err.Raise vbObjectError + 2051, , "Indexes and RowData arrays must have the same length."
     End If
 
     r1 = LBound(C_Arr, 1): r2 = UBound(C_Arr, 1)
@@ -1199,80 +1245,76 @@ Public Sub InsertMultipleRows(Indexes() As Long, RowData() As Variant)
     totalRows = r2 - r1 + 1
     totalCols = c2 - c1 + 1
 
-    ' Normalize and validate all insert rows
-    insertCount = 0
-    For i = LBound(Indexes) To UBound(Indexes)
-        Dim idx As Long: idx = Indexes(i)
+    ' Normalize and validate all insert columns
+    insertCount = UBound(IndexArr) - LBound(IndexArr) + 1
+    ReDim IndexeArrays(LBound(IndexArr) To UBound(IndexArr))
+
+    For i = LBound(IndexArr) To UBound(IndexArr)
+        Dim idx As Long: idx = IndexArr(i)
         If idx < 1 Or idx > totalRows + 1 Then
-            Err.Raise vbObjectError + 2042, , "Row index out of bounds at position " & i & "."
+            Err.Raise vbObjectError + 2052, , "Row index out of bounds at position " & i & "."
         End If
 
         Dim rowArr As Variant
-        rowArr = Convert2D(RowData(i), vbToRow)
+        rowArr = Convert2D(IIf(IsArray(RowData(i)), RowData(i), ValToArray(RowData(i), totalRows, False)), vbToCol)
 
-        If UBound(rowArr, 2) - LBound(rowArr, 2) + 1 <> totalCols Then
-            Err.Raise vbObjectError + 2043, , "Row " & i & " does not match column count."
+        If UBound(rowArr, 1) - LBound(rowArr, 1) + 1 <> totalCols Then
+            Err.Raise vbObjectError + 2053, , "Rows " & i & " does not match column count."
         End If
 
-        insertMap.Add insertCount, Array(idx, rowArr)
-        insertCount = insertCount + UBound(rowArr, 1)
+        RowCount = UBound(rowArr, 1) - LBound(rowArr, 1) + 1
+        insertCount = insertCount + RowCount - 1
+        IndexeArrays = Array(idx, rowArr, RowCount)
+        insertMap.Add i, IndexeArrays
     Next i
 
     ' Prepare result array
     ReDim resultArr(r1 To r2 + insertCount, c1 To c2)
 
-    i = r1: rowOffset = 0
-    Dim insertIndex As Long: insertIndex = 0
+    Dim insertData As Variant, insertAt As Long, InsertRow As Variant, rowOffset As Long
+    For i = 0 To insertMap.Count - 1
 
-    Do While i <= r2 + rowOffset
-        ' Check if we need to insert at this position
-        If insertMap.Exists(insertIndex) Then
-            Dim insertData As Variant
-            insertData = insertMap(insertIndex)
-            Dim insertAt As Long: insertAt = insertData(0)
-            Dim insertRows As Variant: insertRows = insertData(1)
-
-            If i = r1 + insertAt - 1 + rowOffset Then
-                ' Insert rows
-                Dim k As Long
-                For k = LBound(insertRows, 1) To UBound(insertRows, 1)
-                    For j = c1 To c2
-                        resultArr(i, j) = insertRows(k, j)
-                    Next j
-                    i = i + 1
-                Next k
-                insertIndex = insertIndex + 1
-            End If
-        End If
-
-        ' Copy original row
-        If i <= r2 + rowOffset Then
+        insertData = insertMap(i)
+        insertAt = CLng(insertData(0))
+        InsertRow = insertData(1)
+        rowOffset = Get_Offset(insertAt, i + 1, IndexArr, insertMap)
+        For k = LBound(InsertRow, 1) To UBound(InsertRow, 1)
             For j = c1 To c2
-                resultArr(i, j) = C_Arr(i - rowOffset, j)
+                resultArr(i + 1 + rowOffset, j) = InsertRow(k, j)
             Next j
-            i = i + 1
-        End If
-    Loop
+        Next k
+    Next i
+
+    For i = r1 To r2
+        rowOffset = Get_Offset(i, 0, IndexArr, insertMap)
+        For j = c1 To c2
+            resultArr(i + rowOffset, j) = C_Arr(i, j)
+        Next j
+    Next i
 
     C_Arr = resultArr
     If C_Ref <> "" Then C_Dict(C_Ref) = C_Arr
+
 End Sub
 
-Public Sub InsertMultipleCols(Indexes() As Long, ColData() As Variant)
-    Dim i As Long, j As Long
+Public Sub InsertMultipleCols(Indexes As Variant, ColData As Variant)
+    Dim IndexArr As Variant
+    Dim i As Long, j As Long, k As Long
     Dim totalRows As Long, totalCols As Long
     Dim r1 As Long, r2 As Long, c1 As Long, c2 As Long
     Dim insertCount As Long
     Dim resultArr() As Variant
+    Dim IndexeArrays() As Variant
     Dim insertMap As Object: Set insertMap = CreateObject("Scripting.Dictionary")
-    Dim colArr As Variant
-    Dim colOffset As Long
+    Dim colCount As Long
 
     If Not IsArray(C_Arr) Then
         Err.Raise vbObjectError + 2050, , "Target array is not initialized."
     End If
 
-    If UBound(Indexes) <> UBound(ColData) Then
+    IndexArr = NormalizeToArray(Indexes)
+
+    If UBound(IndexArr) <> UBound(ColData) Then
         Err.Raise vbObjectError + 2051, , "Indexes and ColData arrays must have the same length."
     End If
 
@@ -1282,60 +1324,266 @@ Public Sub InsertMultipleCols(Indexes() As Long, ColData() As Variant)
     totalCols = c2 - c1 + 1
 
     ' Normalize and validate all insert columns
-    insertCount = 0
-    For i = LBound(Indexes) To UBound(Indexes)
-        Dim idx As Long: idx = Indexes(i)
+    insertCount = UBound(IndexArr) - LBound(IndexArr) + 1
+    ReDim IndexeArrays(LBound(IndexArr) To UBound(IndexArr))
+
+    For i = LBound(IndexArr) To UBound(IndexArr)
+        Dim idx As Long: idx = IndexArr(i)
         If idx < 1 Or idx > totalCols + 1 Then
             Err.Raise vbObjectError + 2052, , "Column index out of bounds at position " & i & "."
         End If
 
-        colArr = Convert2D(ColData(i), vbToCol)
+        Dim colArr As Variant
+        colArr = Convert2D(IIf(IsArray(ColData(i)), ColData(i), ValToArray(ColData(i), totalRows, False)), vbToCol)
 
         If UBound(colArr, 1) - LBound(colArr, 1) + 1 <> totalRows Then
             Err.Raise vbObjectError + 2053, , "Column " & i & " does not match row count."
         End If
 
-        insertMap.Add insertCount, Array(idx, colArr)
-        insertCount = insertCount + 1
+        colCount = UBound(colArr, 2) - LBound(colArr, 2) + 1
+        insertCount = insertCount + colCount - 1
+        IndexeArrays = Array(idx, colArr, colCount)
+        insertMap.Add i, IndexeArrays
     Next i
 
     ' Prepare result array
     ReDim resultArr(r1 To r2, c1 To c2 + insertCount)
 
-    j = c1: colOffset = 0
-    Dim insertIndex As Long: insertIndex = 0
+    Dim insertData As Variant, insertAt As Long, InsertCol As Variant, colOffset As Long
+    For j = 0 To insertMap.Count - 1
 
-    Do While j <= c2 + colOffset
-        ' Check if we need to insert at this position
-        If insertMap.Exists(insertIndex) Then
-            Dim insertData As Variant
-            insertData = insertMap(insertIndex)
-            Dim insertAt As Long: insertAt = insertData(0)
-            Dim InsertCol As Variant: InsertCol = insertData(1)
+        insertData = insertMap(j)
+        insertAt = CLng(insertData(0))
+        InsertCol = insertData(1)
+        colOffset = Get_Offset(insertAt, j + 1, IndexArr, insertMap)
+        For i = r1 To r2
+            For k = LBound(InsertCol, 2) To UBound(InsertCol, 2)
+                resultArr(i, j + 1 + colOffset) = InsertCol(i, k)
+            Next k
+        Next i
+    Next j
 
-            If j = c1 + insertAt - 1 + colOffset Then
-                ' Insert column
-                Dim r As Long
-                For r = r1 To r2
-                    resultArr(r, j) = InsertCol(r)
-                Next r
-                j = j + 1
-                insertIndex = insertIndex + 1
-            End If
-        End If
-
-        ' Copy original column
-        If j <= c2 + colOffset Then
-            For i = r1 To r2
-                resultArr(i, j) = C_Arr(i, j - colOffset)
-            Next i
-            j = j + 1
-        End If
-    Loop
+    For j = c1 To c2
+        colOffset = Get_Offset(j, 0, IndexArr, insertMap)
+        For i = r1 To r2
+            resultArr(i, j + colOffset) = C_Arr(i, j)
+        Next i
+    Next j
 
     C_Arr = resultArr
     If C_Ref <> "" Then C_Dict(C_Ref) = C_Arr
+
 End Sub
+
+Private Function Get_Offset(Index As Long, StartPos As Long, IndexArr As Variant, insertMap As Object)
+
+    Dim i As Long, m As Long: m = 0
+    For i = LBound(IndexArr) + StartPos To UBound(IndexArr)
+        m = m + IIf(Index >= IndexArr(i), insertMap(i)(2), 0)
+    Next i
+
+    Get_Offset = m
+
+End Function
+
+'Public Sub InsertMultipleRows(Indexes As Variant, RowData As Variant)
+'    Dim i As Long, j As Long, r As Long, c As Long
+'    Dim totalRows As Long, totalCols As Long
+'    Dim r1 As Long, r2 As Long, c1 As Long, c2 As Long
+'    Dim insertCount As Long
+'    Dim resultArr() As Variant
+'    Dim insertList() As Variant
+'
+'    If Not IsArray(C_Arr) Then
+'        Err.Raise vbObjectError + 2060, , "Target array is not initialized."
+'    End If
+'
+'    Dim IndexArr As Variant
+'    IndexArr = NormalizeToArray(Indexes)
+'
+'    If UBound(IndexArr) <> UBound(RowData) Then
+'        Err.Raise vbObjectError + 2061, , "Indexes and RowData arrays must have the same length."
+'    End If
+'
+'    r1 = LBound(C_Arr, 1): r2 = UBound(C_Arr, 1)
+'    c1 = LBound(C_Arr, 2): c2 = UBound(C_Arr, 2)
+'    totalRows = r2 - r1 + 1
+'    totalCols = c2 - c1 + 1
+'
+'    insertCount = 0
+'    ReDim insertList(1 To UBound(IndexArr) - LBound(IndexArr) + 1, 1 To 3)
+'
+'    ' Collect insert info
+'    For i = LBound(IndexArr) To UBound(IndexArr)
+'        Dim idx As Long: idx = IndexArr(i)
+'        If idx < 1 Or idx > totalRows + 1 Then
+'            Err.Raise vbObjectError + 2062, , "Row index out of bounds at position " & i & "."
+'        End If
+'
+'        Dim rowArr As Variant
+'        rowArr = Convert2D(IIf(IsArray(RowData(i)), RowData(i), ValToArray(RowData(i), totalCols, True)), vbToRow)
+'
+'        If UBound(rowArr, 2) - LBound(rowArr, 2) + 1 <> totalCols Then
+'            Err.Raise vbObjectError + 2063, , "Row " & i & " does not match column count."
+'        End If
+'
+'        Dim rowCount As Long
+'        rowCount = UBound(rowArr, 1) - LBound(rowArr, 1) + 1
+'        insertCount = insertCount + rowCount
+'
+'        insertList(i + 1, 1) = idx
+'        insertList(i + 1, 2) = rowArr
+'        insertList(i + 1, 3) = rowCount
+'    Next i
+'
+'    ' Sort insertList by index (stable sort)
+'    QuickSortInsertList insertList, 1, UBound(insertList, 1)
+'
+'    ' Prepare result array
+'    ReDim resultArr(r1 To r2 + insertCount, c1 To c2)
+'
+'    Dim srcRow As Long, destRow As Long, insPtr As Long
+'    srcRow = r1
+'    destRow = r1
+'    insPtr = 1
+'
+'    For j = 1 To totalRows + 1
+'        ' Insert all rows scheduled before this original row
+'        Do While insPtr <= UBound(insertList, 1) And insertList(insPtr, 1) = j
+'            Dim newRow As Variant
+'            newRow = insertList(insPtr, 2)
+'            For r = LBound(newRow, 1) To UBound(newRow, 1)
+'                For c = c1 To c2
+'                    resultArr(destRow, c) = newRow(r, c)
+'                Next c
+'                destRow = destRow + 1
+'            Next r
+'            insPtr = insPtr + 1
+'        Loop
+'
+'        ' Copy original row if within bounds
+'        If j <= totalRows Then
+'            For c = c1 To c2
+'                resultArr(destRow, c) = C_Arr(srcRow, c)
+'            Next c
+'            srcRow = srcRow + 1
+'            destRow = destRow + 1
+'        End If
+'    Next j
+'
+'    C_Arr = resultArr
+'    If C_Ref <> "" Then C_Dict(C_Ref) = C_Arr
+'End Sub
+'
+'Public Sub InsertMultipleCols(Indexes As Variant, ColData As Variant)
+'    Dim i As Long, j As Long, r As Long, c As Long
+'    Dim totalRows As Long, totalCols As Long
+'    Dim r1 As Long, r2 As Long, c1 As Long, c2 As Long
+'    Dim insertCount As Long
+'    Dim resultArr() As Variant
+'    Dim insertList() As Variant
+'
+'    If Not IsArray(C_Arr) Then
+'        Err.Raise vbObjectError + 2050, , "Target array is not initialized."
+'    End If
+'
+'    Dim IndexArr As Variant
+'    IndexArr = NormalizeToArray(Indexes)
+'
+'    If UBound(IndexArr) <> UBound(ColData) Then
+'        Err.Raise vbObjectError + 2051, , "Indexes and ColData arrays must have the same length."
+'    End If
+'
+'    r1 = LBound(C_Arr, 1): r2 = UBound(C_Arr, 1)
+'    c1 = LBound(C_Arr, 2): c2 = UBound(C_Arr, 2)
+'    totalRows = r2 - r1 + 1
+'    totalCols = c2 - c1 + 1
+'
+'    insertCount = 0
+'    ReDim insertList(1 To UBound(IndexArr) - LBound(IndexArr) + 1, 1 To 3)
+'
+'    ' Collect insert info
+'    For i = LBound(IndexArr) To UBound(IndexArr)
+'        Dim idx As Long: idx = IndexArr(i)
+'        If idx < 1 Or idx > totalCols + 1 Then
+'            Err.Raise vbObjectError + 2052, , "Column index out of bounds at position " & i & "."
+'        End If
+'
+'        Dim colArr As Variant
+'        colArr = Convert2D(IIf(IsArray(ColData(i)), ColData(i), ValToArray(ColData(i), totalRows, False)), vbToCol)
+'
+'        If UBound(colArr, 1) - LBound(colArr, 1) + 1 <> totalRows Then
+'            Err.Raise vbObjectError + 2053, , "Column " & i & " does not match row count."
+'        End If
+'
+'        Dim colCount As Long
+'        colCount = UBound(colArr, 2) - LBound(colArr, 2) + 1
+'        insertCount = insertCount + colCount
+'
+'        insertList(i + 1, 1) = idx
+'        insertList(i + 1, 2) = colArr
+'        insertList(i + 1, 3) = colCount
+'    Next i
+'
+'    ' Sort insertList by index (stable sort)
+'    QuickSortInsertList insertList, 1, UBound(insertList, 1)
+'
+'    ' Prepare result array
+'    ReDim resultArr(r1 To r2, c1 To c2 + insertCount)
+'
+'    Dim srcCol As Long, destCol As Long, insPtr As Long
+'    srcCol = c1
+'    destCol = c1
+'    insPtr = 1
+'
+'    For j = 1 To totalCols + 1
+'        ' Insert all columns scheduled before this original column
+'        Do While insPtr <= UBound(insertList, 1) And insertList(insPtr, 1) = j
+'            Dim newCol As Variant
+'            newCol = insertList(insPtr, 2)
+'            For c = LBound(newCol, 2) To UBound(newCol, 2)
+'                For r = r1 To r2
+'                    resultArr(r, destCol) = newCol(r, c)
+'                Next r
+'                destCol = destCol + 1
+'            Next c
+'            insPtr = insPtr + 1
+'        Loop
+'
+'        ' Copy original column if within bounds
+'        If j <= totalCols Then
+'            For r = r1 To r2
+'                resultArr(r, destCol) = C_Arr(r, srcCol)
+'            Next r
+'            srcCol = srcCol + 1
+'            destCol = destCol + 1
+'        End If
+'    Next j
+'
+'    C_Arr = resultArr
+'    If C_Ref <> "" Then C_Dict(C_Ref) = C_Arr
+'End Sub
+'
+'Private Sub QuickSortInsertList(ByRef arr() As Variant, low As Long, high As Long)
+'    Dim i As Long, j As Long, pivot As Long
+'    Dim temp1 As Variant, temp2 As Variant, temp3 As Variant
+'    If low < high Then
+'        pivot = arr((low + high) \ 2, 1)
+'        i = low: j = high
+'        Do While i <= j
+'            Do While arr(i, 1) < pivot: i = i + 1: Loop
+'            Do While arr(j, 1) > pivot: j = j - 1: Loop
+'            If i <= j Then
+'                temp1 = arr(i, 1): temp2 = arr(i, 2): temp3 = arr(i, 3)
+'                arr(i, 1) = arr(j, 1): arr(i, 2) = arr(j, 2): arr(i, 3) = arr(j, 3)
+'                arr(j, 1) = temp1: arr(j, 2) = temp2: arr(j, 3) = temp3
+'                i = i + 1: j = j - 1
+'            End If
+'        Loop
+'        If low < j Then QuickSortInsertList arr, low, j
+'        If i < high Then QuickSortInsertList arr, i, high
+'    End If
+'End Sub
 
 Public Sub DeleteRows(ByVal Index As Variant)
     Dim i As Long, j As Long, n As Long
@@ -1520,7 +1768,7 @@ End Function
 Private Function NormalizeToArray(Index As Variant) As Variant
     Dim i As Long, Var As Variant
     Dim VarComma() As String, VarColon() As String
-    Dim startRow As Long, endRow As Long, NewLength As Long
+    Dim startVal As Long, endVal As Long, NewLength As Long
     Dim returnArr() As Variant, oldUBound As Long
 
     Select Case VarType(Index)
@@ -1543,19 +1791,16 @@ Private Function NormalizeToArray(Index As Variant) As Variant
                         Err.Raise vbObjectError + 1017, , "Reference Index not valid."
                     End If
 
-                    startRow = CLng(VarColon(0)): endRow = CLng(VarColon(1))
-                    If startRow > endRow Then Swap startRow, endRow
-                    If startRow < 1 Or endRow > UBound(C_Arr, 1) Then
-                        Err.Raise vbObjectError + 1017, , "Reference Index out of bounds."
-                    End If
+                    startVal = CLng(VarColon(0)): endVal = CLng(VarColon(1))
+                    If startVal > endVal Then Swap startVal, endVal
 
                     oldUBound = 0
                     If Not IsArray(returnArr) Then oldUBound = UBound(returnArr)
-                    NewLength = endRow - startRow + 1
+                    NewLength = endVal - startVal + 1
                     ReDim Preserve returnArr(0 To oldUBound + NewLength - 1)
 
                     For i = 0 To NewLength - 1
-                        returnArr(oldUBound + i) = startRow + i
+                        returnArr(oldUBound + i) = startVal + i
                     Next i
                 Next Var
 
@@ -1581,51 +1826,51 @@ Private Function NormalizeToArray(Index As Variant) As Variant
     End Select
 End Function
 
-Public Function NormalizeCriteria(ByVal colIndexArr As Variant, ByVal criteria As Variant, ByVal totalRows As Long) As Variant
-    Dim criteriaArr As Variant
-    Dim i As Long, totalIndexes As Long, totalCriteria As Long
+'Public Function NormalizeCriteria(ByVal colIndexArr As Variant, ByVal criteria As Variant, ByVal totalRows As Long) As Variant
+'    Dim criteriaArr As Variant
+'    Dim i As Long, totalIndexes As Long, totalCriteria As Long
+'
+'    totalIndexes = UBound(colIndexArr) - LBound(colIndexArr) + 1
+'
+'    If Not IsArray(criteria) Then
+'        criteriaArr = Array(criteria)
+'
+'    ElseIf DimensionOfArray(criteria) = 1 Then
+'        totalCriteria = UBound(criteria) - LBound(criteria) + 1
+'        If totalIndexes <> totalCriteria Then
+'            Err.Raise vbObjectError + 2061, , "colIndex and criteria must be of equal length."
+'        End If
+'        criteriaArr = criteria
+'
+'    ElseIf DimensionOfArray(criteria) = 2 Then
+'        If totalIndexes <> 1 Then
+'            Err.Raise vbObjectError + 2063, , "Multi-row criteria only allowed for single colIndex."
+'        End If
+'        If UBound(criteria, 1) - LBound(criteria, 1) + 1 <> totalRows Then
+'            Err.Raise vbObjectError + 2063, , "Criteria array must match row count."
+'        End If
+'        criteriaArr = criteria
+'
+'    Else
+'        Err.Raise vbObjectError + 2063, , "Invalid criteria format."
+'    End If
+'
+'    NormalizeCriteria = criteriaArr
+'End Function
 
-    totalIndexes = UBound(colIndexArr) - LBound(colIndexArr) + 1
-
-    If Not IsArray(criteria) Then
-        criteriaArr = Array(criteria)
-
-    ElseIf DimensionOfArray(criteria) = 1 Then
-        totalCriteria = UBound(criteria) - LBound(criteria) + 1
-        If totalIndexes <> totalCriteria Then
-            Err.Raise vbObjectError + 2061, , "colIndex and criteria must be of equal length."
-        End If
-        criteriaArr = criteria
-
-    ElseIf DimensionOfArray(criteria) = 2 Then
-        If totalIndexes <> 1 Then
-            Err.Raise vbObjectError + 2063, , "Multi-row criteria only allowed for single colIndex."
-        End If
-        If UBound(criteria, 1) - LBound(criteria, 1) + 1 <> totalRows Then
-            Err.Raise vbObjectError + 2063, , "Criteria array must match row count."
-        End If
-        criteriaArr = criteria
-
-    Else
-        Err.Raise vbObjectError + 2063, , "Invalid criteria format."
-    End If
-
-    NormalizeCriteria = criteriaArr
-End Function
-
-Private Function NormalizeMatchMode(ByVal colIndexArr As Variant, ByVal MatchMode As Variant) As Variant
+Private Function NormalizeMatchMode(ByVal colIndexArr As Variant, ByVal matchmode As Variant) As Variant
     Dim MatchModeArr() As Variant
     Dim j As Long
 
-    If IsArray(MatchMode) Then
-        If UBound(MatchMode) - LBound(MatchMode) <> UBound(colIndexArr) - LBound(colIndexArr) Then
+    If IsArray(matchmode) Then
+        If UBound(matchmode) - LBound(matchmode) <> UBound(colIndexArr) - LBound(colIndexArr) Then
             Err.Raise vbObjectError + 2090, , "MatchMode array must be same length as colIndex and Criteria."
         End If
-        MatchModeArr = MatchMode
+        MatchModeArr = matchmode
     Else
         ReDim MatchModeArr(LBound(colIndexArr) To UBound(colIndexArr))
         For j = LBound(colIndexArr) To UBound(colIndexArr)
-            MatchModeArr(j) = MatchMode
+            MatchModeArr(j) = matchmode
         Next j
     End If
 
@@ -1634,7 +1879,7 @@ End Function
 
 Public Function CountIfs(ByVal ColIndex As Variant, _
                             ByVal criteria As Variant, _
-                            Optional ByVal MatchMode As Variant = vbTextEquals, _
+                            Optional ByVal matchmode As Variant = vbTextEquals, _
                             Optional CompareMethod As VbCompareMethod = vbBinaryCompare) As Long
                          
     Dim i As Long, j As Long
@@ -1650,8 +1895,8 @@ Public Function CountIfs(ByVal ColIndex As Variant, _
     totalCols = UBound(C_Arr, 2) - LBound(C_Arr, 2) + 1
     
     colIndexArr = NormalizeToArray(ColIndex)
-    criteriaArr = NormalizeCriteria(colIndexArr, criteria, totalRows)
-    MatchModeArr = NormalizeMatchMode(colIndexArr, MatchMode)
+    criteriaArr = IIf(IsArray(criteria), criteria, Array(criteria))
+    MatchModeArr = NormalizeMatchMode(colIndexArr, matchmode)
     
     If DimensionOfArray(colIndexArr) > 1 Or DimensionOfArray(criteriaArr) > 1 Then
         Err.Raise vbObjectError + 2050, , "Both colIndex and criteria must be 1D arrays or a pair of Single Variables."
@@ -1662,18 +1907,18 @@ Public Function CountIfs(ByVal ColIndex As Variant, _
     End If
 
     For i = 1 To totalRows
-        Dim bool As Boolean: bool = True
+        Dim Bool As Boolean: Bool = True
         For j = LBound(colIndexArr) To UBound(colIndexArr)
-            Dim col As Long: col = colIndexArr(j)
-            If col < 1 Or col > totalCols Then
-                Err.Raise vbObjectError + 2052, , "Column index out of bounds: " & col
+            Dim Col As Long: Col = colIndexArr(j)
+            If Col < 1 Or Col > totalCols Then
+                Err.Raise vbObjectError + 2052, , "Column index out of bounds: " & Col
             End If
-            If Not IsMatch(C_Arr(i, col), criteriaArr(j), MatchModeArr(j), CompareMethod) Then
-                bool = False
+            If Not IsMatch(C_Arr(i, Col), criteriaArr(j), MatchModeArr(j), CompareMethod) Then
+                Bool = False
                 Exit For
             End If
         Next j
-        If bool Then matchCount = matchCount + 1
+        If Bool Then matchCount = matchCount + 1
     Next i
 
     CountIfs = matchCount
@@ -1682,7 +1927,7 @@ End Function
 Public Function SumIfs(ByVal ColIndex As Variant, _
                        ByVal criteria As Variant, _
                        ByVal SumCol As Long, _
-                       Optional ByVal MatchMode As Variant = vbTextEquals, _
+                       Optional ByVal matchmode As Variant = vbTextEquals, _
                        Optional CompareMethod As VbCompareMethod = vbBinaryCompare) As Double
     Dim i As Long, j As Long
     Dim totalRows As Long, totalCols As Long
@@ -1693,7 +1938,7 @@ Public Function SumIfs(ByVal ColIndex As Variant, _
 
     colIndexArr = NormalizeToArray(ColIndex)
     criteriaArr = IIf(IsArray(criteria), criteria, Array(criteria))
-    MatchModeArr = NormalizeMatchMode(colIndexArr, MatchMode)
+    MatchModeArr = NormalizeMatchMode(colIndexArr, matchmode)
     
     If DimensionOfArray(colIndexArr) > 1 Or DimensionOfArray(criteriaArr) > 1 Then
         Err.Raise vbObjectError + 2054, , "Both colIndex and criteria must be 1D arrays or a pair of Single Variables."
@@ -1711,14 +1956,14 @@ Public Function SumIfs(ByVal ColIndex As Variant, _
     End If
 
     For i = 1 To totalRows
-        Dim bool As Boolean: bool = True
+        Dim Bool As Boolean: Bool = True
         For j = LBound(colIndexArr) To UBound(colIndexArr)
             If Not IsMatch(C_Arr(i, colIndexArr(j)), criteriaArr(j), MatchModeArr(j), CompareMethod) Then
-                bool = False
+                Bool = False
                 Exit For
             End If
         Next j
-        If bool Then sumTotal = sumTotal + CDbl(C_Arr(i, SumCol))
+        If Bool Then sumTotal = sumTotal + CDbl(C_Arr(i, SumCol))
     Next i
 
     SumIfs = sumTotal
@@ -1727,7 +1972,7 @@ End Function
 Public Function MaxIfs(ByVal ColIndex As Variant, _
                        ByVal criteria As Variant, _
                        ByVal targetCol As Long, _
-                       Optional ByVal MatchMode As Variant = vbTextEquals, _
+                       Optional ByVal matchmode As Variant = vbTextEquals, _
                        Optional CompareMethod As VbCompareMethod = vbBinaryCompare) As Double
     Dim i As Long, j As Long
     Dim totalRows As Long, totalCols As Long
@@ -1739,7 +1984,7 @@ Public Function MaxIfs(ByVal ColIndex As Variant, _
 
     colIndexArr = NormalizeToArray(ColIndex)
     criteriaArr = IIf(IsArray(criteria), criteria, Array(criteria))
-    MatchModeArr = NormalizeMatchMode(colIndexArr, MatchMode)
+    MatchModeArr = NormalizeMatchMode(colIndexArr, matchmode)
     
     If DimensionOfArray(colIndexArr) > 1 Or DimensionOfArray(criteriaArr) > 1 Then
         Err.Raise vbObjectError + 2058, , "Both colIndex and criteria must be 1D arrays or a pair of Single Variables."
@@ -1758,14 +2003,14 @@ Public Function MaxIfs(ByVal ColIndex As Variant, _
 
     firstMatch = False
     For i = 1 To totalRows
-        Dim bool As Boolean: bool = True
+        Dim Bool As Boolean: Bool = True
         For j = LBound(colIndexArr) To UBound(colIndexArr)
-            If Not IsMatch(C_Arr(i, colIndexArr(j)), criteriaArr(j), MatchMode, CompareMethod) Then
-                bool = False
+            If Not IsMatch(C_Arr(i, colIndexArr(j)), criteriaArr(j), matchmode, CompareMethod) Then
+                Bool = False
                 Exit For
             End If
         Next j
-        If bool Then
+        If Bool Then
             If Not firstMatch Then
                 maxVal = CDbl(C_Arr(i, targetCol))
                 firstMatch = True
@@ -1781,7 +2026,7 @@ End Function
 Public Function MinIfs(ByVal ColIndex As Variant, _
                        ByVal criteria As Variant, _
                        ByVal targetCol As Long, _
-                       Optional ByVal MatchMode As Variant = vbTextEquals, _
+                       Optional ByVal matchmode As Variant = vbTextEquals, _
                        Optional CompareMethod As VbCompareMethod = vbBinaryCompare) As Double
     Dim i As Long, j As Long
     Dim totalRows As Long, totalCols As Long
@@ -1793,7 +2038,7 @@ Public Function MinIfs(ByVal ColIndex As Variant, _
 
     colIndexArr = NormalizeToArray(ColIndex)
     criteriaArr = IIf(IsArray(criteria), criteria, Array(criteria))
-    MatchModeArr = NormalizeMatchMode(colIndexArr, MatchMode)
+    MatchModeArr = NormalizeMatchMode(colIndexArr, matchmode)
     
     If DimensionOfArray(colIndexArr) > 1 Or DimensionOfArray(criteriaArr) > 1 Then
         Err.Raise vbObjectError + 2062, , "Both colIndex and criteria must be 1D arrays or a pair of Single Variables."
@@ -1804,15 +2049,15 @@ Public Function MinIfs(ByVal ColIndex As Variant, _
     End If
     
     ' Normalize MatchMode
-    If IsArray(MatchMode) Then
-        MatchModeArr = MatchMode
+    If IsArray(matchmode) Then
+        MatchModeArr = matchmode
         If UBound(MatchModeArr) - LBound(MatchModeArr) <> UBound(colIndexArr) - LBound(colIndexArr) Then
             Err.Raise vbObjectError + 2090, , "MatchMode array must be same length as colIndex and Criteria."
         End If
     Else
         ReDim MatchModeArr(LBound(colIndexArr) To UBound(colIndexArr))
         For j = LBound(MatchModeArr) To UBound(MatchModeArr)
-            MatchModeArr(j) = MatchMode
+            MatchModeArr(j) = matchmode
         Next j
     End If
     
@@ -1825,14 +2070,14 @@ Public Function MinIfs(ByVal ColIndex As Variant, _
 
     firstMatch = False
     For i = 1 To totalRows
-        Dim bool As Boolean: bool = True
+        Dim Bool As Boolean: Bool = True
         For j = LBound(colIndexArr) To UBound(colIndexArr)
             If Not IsMatch(C_Arr(i, colIndexArr(j)), criteriaArr(j), MatchModeArr(j), CompareMethod) Then
-                bool = False
+                Bool = False
                 Exit For
             End If
         Next j
-        If bool Then
+        If Bool Then
             If Not firstMatch Then
                 minVal = CDbl(C_Arr(i, targetCol))
                 firstMatch = True
@@ -1848,7 +2093,7 @@ End Function
 Public Function AverageIfs(ByVal ColIndex As Variant, _
                            ByVal criteria As Variant, _
                            ByVal targetCol As Long, _
-                           Optional MatchMode As Variant = vbTextEquals, _
+                           Optional matchmode As Variant = vbTextEquals, _
                            Optional CompareMethod As VbCompareMethod = vbBinaryCompare) As Double
     Dim i As Long, j As Long, Count As Long
     Dim totalRows As Long, totalCols As Long
@@ -1859,7 +2104,7 @@ Public Function AverageIfs(ByVal ColIndex As Variant, _
 
     colIndexArr = NormalizeToArray(ColIndex)
     criteriaArr = IIf(IsArray(criteria), criteria, Array(criteria))
-    MatchModeArr = NormalizeMatchMode(colIndexArr, MatchMode)
+    MatchModeArr = NormalizeMatchMode(colIndexArr, matchmode)
     
     If DimensionOfArray(colIndexArr) > 1 Or DimensionOfArray(criteriaArr) > 1 Then
         Err.Raise vbObjectError + 2087, , "colIndex and criteria must be 1D arrays."
@@ -1877,14 +2122,14 @@ Public Function AverageIfs(ByVal ColIndex As Variant, _
     End If
 
     For i = 1 To totalRows
-        Dim bool As Boolean: bool = True
+        Dim Bool As Boolean: Bool = True
         For j = LBound(colIndexArr) To UBound(colIndexArr)
             If Not IsMatch(C_Arr(i, colIndexArr(j)), criteriaArr(j), MatchModeArr(j), CompareMethod) Then
-                bool = False
+                Bool = False
                 Exit For
             End If
         Next j
-        If bool Then
+        If Bool Then
             sumTotal = sumTotal + CDbl(C_Arr(i, targetCol))
             Count = Count + 1
         End If
@@ -1900,7 +2145,7 @@ End Function
 Public Function FilterIndexes(ByVal ColIndex As Variant, _
                               ByVal criteria As Variant, _
                               Optional ByVal logic As vbFilterLogic = vbLogicAnd, _
-                              Optional ByVal MatchMode As Variant = vbTextEquals, _
+                              Optional ByVal matchmode As Variant = vbTextEquals, _
                               Optional CompareMethod As VbCompareMethod = vbBinaryCompare, _
                               Optional InvertMatch As Boolean = False) As Variant
     Dim i As Long, j As Long
@@ -1912,7 +2157,7 @@ Public Function FilterIndexes(ByVal ColIndex As Variant, _
 
     colIndexArr = NormalizeToArray(ColIndex)
     criteriaArr = IIf(IsArray(criteria), criteria, Array(criteria))
-    MatchModeArr = NormalizeMatchMode(colIndexArr, MatchMode)
+    MatchModeArr = NormalizeMatchMode(colIndexArr, matchmode)
 
     If DimensionOfArray(colIndexArr) > 1 Or DimensionOfArray(criteriaArr) > 1 Then
         Err.Raise vbObjectError + 2080, , "Both colIndex and criteria must be 1D arrays."
@@ -1926,29 +2171,29 @@ Public Function FilterIndexes(ByVal ColIndex As Variant, _
     ReDim resultArr(1 To totalRows)
 
     For i = 1 To totalRows
-        Dim bool As Boolean
+        Dim Bool As Boolean
         Select Case logic
             Case vbLogicAnd
-                bool = True
+                Bool = True
                 For j = LBound(colIndexArr) To UBound(colIndexArr)
                     If Not IsMatch(C_Arr(i, colIndexArr(j)), criteriaArr(j), MatchModeArr(j), CompareMethod) Then
-                        bool = False: Exit For
+                        Bool = False: Exit For
                     End If
                 Next j
             Case vbLogicOr
-                bool = False
+                Bool = False
                 For j = LBound(colIndexArr) To UBound(colIndexArr)
                     If IsMatch(C_Arr(i, colIndexArr(j)), criteriaArr(j), MatchModeArr(j), CompareMethod) Then
-                        bool = True: Exit For
+                        Bool = True: Exit For
                     End If
                 Next j
             Case Else
                 Err.Raise vbObjectError + 2082, , "Invalid logic type."
         End Select
 
-        If InvertMatch Then bool = Not bool
+        If InvertMatch Then Bool = Not Bool
 
-        If bool Then
+        If Bool Then
             matchCount = matchCount + 1
             resultArr(matchCount) = i
         End If
@@ -1965,7 +2210,7 @@ End Function
 Public Function FilterIfs(ByVal ColIndex As Variant, _
                           ByVal criteria As Variant, _
                           Optional ByVal logic As vbFilterLogic = vbLogicAnd, _
-                          Optional ByVal MatchMode As Variant = vbTextEquals, _
+                          Optional ByVal matchmode As Variant = vbTextEquals, _
                           Optional CompareMethod As VbCompareMethod = vbBinaryCompare, _
                           Optional InvertMatch As Boolean = False) As Arrays
     Dim i As Long, j As Long
@@ -1977,7 +2222,7 @@ Public Function FilterIfs(ByVal ColIndex As Variant, _
 
     If Not IsArray(C_Arr) Then Err.Raise vbObjectError + 2065, , "Array not initialized."
 
-    matchIndexes = FilterIndexes(ColIndex, criteria, logic, MatchMode, CompareMethod, InvertMatch)
+    matchIndexes = FilterIndexes(ColIndex, criteria, logic, matchmode, CompareMethod, InvertMatch)
 
     totalCols = UBound(C_Arr, 2)
 
@@ -2008,7 +2253,7 @@ Public Sub ConvertColumns(ByVal ColIndex As Variant, ByVal conversionType As vbC
     Dim totalRows As Long, totalCols As Long
     Dim colIndexArr As Variant
     Dim ConversionErrors As Collection
-    Dim col As Long, originalValue As Variant
+    Dim Col As Long, originalValue As Variant
 
     If Not IsArray(C_Arr) Then
         Err.Raise vbObjectError + 2069, , "Array not initialized."
@@ -2025,21 +2270,21 @@ Public Sub ConvertColumns(ByVal ColIndex As Variant, ByVal conversionType As vbC
     Set ConversionErrors = New Collection
 
     For j = LBound(colIndexArr) To UBound(colIndexArr)
-        col = colIndexArr(j)
-        If col < 1 Or col > totalCols Then
-            Err.Raise vbObjectError + 2071, , "Column index out of bounds: " & col
+        Col = colIndexArr(j)
+        If Col < 1 Or Col > totalCols Then
+            Err.Raise vbObjectError + 2071, , "Column index out of bounds: " & Col
         End If
 
         For i = 1 To totalRows
-            originalValue = C_Arr(i, col)
+            originalValue = C_Arr(i, Col)
             On Error GoTo ConversionFailed
             Select Case conversionType
-                Case vbToDate:     C_Arr(i, col) = CDate(originalValue)
-                Case vbToCurrency: C_Arr(i, col) = FormatCurrency(originalValue)
-                Case vbToInteger:  C_Arr(i, col) = CInt(originalValue)
-                Case vbToLong:     C_Arr(i, col) = CLng(originalValue)
-                Case vbToDouble:   C_Arr(i, col) = CDbl(originalValue)
-                Case vbToString:   C_Arr(i, col) = CStr(originalValue)
+                Case vbToDate:     C_Arr(i, Col) = CDate(originalValue)
+                Case vbToCurrency: C_Arr(i, Col) = FormatCurrency(originalValue)
+                Case vbToInteger:  C_Arr(i, Col) = CInt(originalValue)
+                Case vbToLong:     C_Arr(i, Col) = CLng(originalValue)
+                Case vbToDouble:   C_Arr(i, Col) = CDbl(originalValue)
+                Case vbToString:   C_Arr(i, Col) = CStr(originalValue)
                 Case Else
                     Err.Raise vbObjectError + 2072, , "Invalid conversion type."
             End Select
@@ -2047,7 +2292,7 @@ Public Sub ConvertColumns(ByVal ColIndex As Variant, ByVal conversionType As vbC
             GoTo ContinueLoop
 
 ConversionFailed:
-            ConversionErrors.Add "Row " & i & ", Col " & col & ": '" & originalValue & "'"
+            ConversionErrors.Add "Row " & i & ", Col " & Col & ": '" & originalValue & "'"
             Resume ContinueLoop
 
 ContinueLoop:
@@ -2070,7 +2315,7 @@ Public Sub FormatColumns(ByVal ColIndex As Variant, ByVal formatString As String
     Dim totalRows As Long, totalCols As Long
     Dim colIndexArr As Variant
     Dim FormatErrors As Collection
-    Dim col As Long, originalValue As Variant
+    Dim Col As Long, originalValue As Variant
 
     If Not IsArray(C_Arr) Then
         Err.Raise vbObjectError + 2073, , "Array not initialized."
@@ -2088,20 +2333,20 @@ Public Sub FormatColumns(ByVal ColIndex As Variant, ByVal formatString As String
     Set FormatErrors = New Collection
 
     For j = LBound(colIndexArr) To UBound(colIndexArr)
-        col = colIndexArr(j)
-        If col < 1 Or col > totalCols Then
-            Err.Raise vbObjectError + 2075, , "Column index out of bounds: " & col
+        Col = colIndexArr(j)
+        If Col < 1 Or Col > totalCols Then
+            Err.Raise vbObjectError + 2075, , "Column index out of bounds: " & Col
         End If
 
         For i = 1 To totalRows
-            originalValue = C_Arr(i, col)
+            originalValue = C_Arr(i, Col)
             On Error GoTo FormatFailed
-            C_Arr(i, col) = Format(originalValue, formatString)
+            C_Arr(i, Col) = Format(originalValue, formatString)
             On Error GoTo 0
             GoTo ContinueLoop
 
 FormatFailed:
-            FormatErrors.Add "Row " & i & ", Col " & col & ": '" & originalValue & "'"
+            FormatErrors.Add "Row " & i & ", Col " & Col & ": '" & originalValue & "'"
             Resume ContinueLoop
 
 ContinueLoop:
@@ -2120,19 +2365,40 @@ ContinueLoop:
     End If
 End Sub
 
-Public Sub ReplaceInColumns(ByVal ColIndex As Variant, _
-                   ByVal findValue As String, _
-                   ByVal replaceValue As Variant, _
-                   Optional ByVal operatorType As vbReplaceOperator = vbEquals)
+Private Function IsReplacable(FindWithin As String, findValue As String, operatorType As vbReplaceOperator, compareMode As VbCompareMethod) As Boolean
 
-    Dim i As Long, j As Long
+    Select Case operatorType
+        Case vbEquals
+            IsReplacable = (StrComp(FindWithin, findValue, compareMode) = 0)
+        Case vbContains
+            IsReplacable = (InStr(1, FindWithin, findValue, compareMode) > 0)
+        Case vbStartsWith
+            IsReplacable = (StrComp(left(FindWithin, Len(findValue)), findValue, compareMode) = 0)
+        Case vbEndsWith
+            IsReplacable = (StrComp(right(FindWithin, Len(findValue)), findValue, compareMode) = 0)
+        Case Else
+            Err.Raise vbObjectError + 2079, , "Invalid replace operator."
+    End Select
+    
+End Function
+
+Public Sub ReplaceInColumns(ByVal ColIndex As Variant, _
+                             ByVal findValues As Variant, _
+                             ByVal replaceValue As Variant, _
+                             TrimBeforeReplace As Boolean, _
+                             Optional ReplaceWithin As Boolean = False, _
+                             Optional ByVal operatorType As vbReplaceOperator = vbEquals, _
+                             Optional compareMode As VbCompareMethod = vbBinaryCompare)
+
+    Dim i As Long, j As Long, k As Long
     Dim totalRows As Long, totalCols As Long
-    Dim colIndexArr As Variant
+    Dim colIndexArr As Variant, findArr As Variant
     Dim ReplaceErrors As Collection
-    Dim col As Long, CellValue As Variant
+    Dim Col As Long, CellValue As String, searchValue As String
 
     If Not IsArray(C_Arr) Then Err.Raise vbObjectError + 2076, , "Array not initialized."
     colIndexArr = NormalizeToArray(ColIndex)
+    findArr = IIf(IsArray(findValues), findValues, Array(findValues))
 
     If DimensionOfArray(colIndexArr) > 1 Then
         Err.Raise vbObjectError + 2077, , "colIndex must be a 1D array or a Long/Integer variable."
@@ -2144,32 +2410,31 @@ Public Sub ReplaceInColumns(ByVal ColIndex As Variant, _
     Set ReplaceErrors = New Collection
 
     For j = LBound(colIndexArr) To UBound(colIndexArr)
-        col = colIndexArr(j)
-        If col < 1 Or col > totalCols Then
-            Err.Raise vbObjectError + 2078, , "Column index out of bounds: " & col
+        Col = colIndexArr(j)
+        If Col < 1 Or Col > totalCols Then
+            Err.Raise vbObjectError + 2078, , "Column index out of bounds: " & Col
         End If
 
         For i = 1 To totalRows
             On Error GoTo ReplaceFailed
-            CellValue = CStr(C_Arr(i, col))
-            Select Case operatorType
-                Case vbEquals
-                    If CellValue = findValue Then C_Arr(i, col) = replaceValue
-                Case vbContains
-                    If InStr(CellValue, findValue) > 0 Then C_Arr(i, col) = replaceValue
-                Case vbStartsWith
-                    If Left(CellValue, Len(findValue)) = findValue Then C_Arr(i, col) = replaceValue
-                Case vbEndsWith
-                    If Right(CellValue, Len(findValue)) = findValue Then C_Arr(i, col) = replaceValue
-                Case Else
-                    Err.Raise vbObjectError + 2079, , "Invalid replace operator."
-            End Select
-            On Error GoTo 0
-            GoTo ContinueLoop
-ReplaceFailed:
-            ReplaceErrors.Add "Row " & i & ", Col " & col & ": '" & C_Arr(i, col) & "'"
-            Resume ContinueLoop
+            CellValue = CStr(C_Arr(i, Col))
+            If TrimBeforeReplace Then CellValue = Trim(CellValue)
 
+            ' Loop through all findValues
+            For k = LBound(findArr) To UBound(findArr)
+                searchValue = CStr(findArr(k))
+
+                If IsReplacable(CellValue, searchValue, operatorType, compareMode) Then
+                    If ReplaceWithin Then
+                        C_Arr(i, Col) = Replace(CellValue, searchValue, CStr(replaceValue), , , compareMode)
+                    Else
+                        C_Arr(i, Col) = replaceValue
+                    End If
+                    Exit For ' Stop after first match
+                End If
+            Next k
+
+            On Error GoTo 0
 ContinueLoop:
         Next i
     Next j
@@ -2179,87 +2444,104 @@ ContinueLoop:
     ' Optional: Display or handle errors
     If ReplaceErrors.Count > 0 Then
         Dim msg As String: msg = "Replacement failed for the following cells:" & vbCrLf
-        For Each CellValue In ReplaceErrors
-            msg = msg & CellValue & vbCrLf
+        Dim FailedCells As Variant
+        For Each FailedCells In ReplaceErrors
+            msg = msg & FailedCells & vbCrLf
         Next
         MsgBox msg, vbExclamation, "Replacement Errors"
     End If
+    Exit Sub
+
+ReplaceFailed:
+    ReplaceErrors.Add "Row " & i & ", Col " & Col & ": '" & C_Arr(i, Col) & "'"
+    Resume ContinueLoop
 End Sub
 
 Public Sub ReplaceInRows(ByVal RowIndex As Variant, _
-                         ByVal findValue As String, _
-                         ByVal replaceValue As Variant, _
-                         Optional ByVal operatorType As vbReplaceOperator = vbEquals)
+                       ByVal findValues As Variant, _
+                       ByVal replaceValue As Variant, _
+                       Optional TrimBeforeReplace As Boolean = False, _
+                       Optional ReplaceWithin As Boolean = False, _
+                       Optional ByVal operatorType As vbReplaceOperator = vbEquals, _
+                       Optional compareMode As VbCompareMethod = vbTextCompare)
 
-    Dim i As Long, j As Long
+    Dim i As Long, j As Long, k As Long
     Dim totalRows As Long, totalCols As Long
-    Dim rowIndexArr As Variant
+    Dim rowIndexArr As Variant, findArr As Variant
     Dim ReplaceErrors As Collection
-    Dim row As Long, CellValue As Variant
-    If Not IsArray(C_Arr) Then Err.Raise vbObjectError + 2080, , "Array not initialized."
-    rowIndexArr = NormalizeToArray(RowIndex)
+    Dim CellValue As String, searchValue As String
 
-    If DimensionOfArray(rowIndexArr) > 1 Then
-        Err.Raise vbObjectError + 2081, , "rowIndex must be a 1D array or a Long/Integer variable."
-    End If
+    If Not IsArray(C_Arr) Then Err.Raise vbObjectError + 2076, , "Array not initialized."
+    rowIndexArr = NormalizeToArray(RowIndex)
+    findArr = IIf(IsArray(findValues), findValues, Array(findValues))
+
     totalRows = UBound(C_Arr, 1)
     totalCols = UBound(C_Arr, 2)
 
     Set ReplaceErrors = New Collection
 
     For i = LBound(rowIndexArr) To UBound(rowIndexArr)
-        row = rowIndexArr(i)
-        If row < 1 Or row > totalRows Then
-            Err.Raise vbObjectError + 2082, , "Row index out of bounds: " & row
+        Dim rowNum As Long
+        rowNum = rowIndexArr(i)
+        If rowNum < 1 Or rowNum > totalRows Then
+            Err.Raise vbObjectError + 2080, , "Row index out of bounds: " & rowNum
         End If
 
         For j = 1 To totalCols
             On Error GoTo ReplaceFailed
-            CellValue = CStr(C_Arr(row, j))
-            Select Case operatorType
-                Case vbEquals
-                    If CellValue = findValue Then C_Arr(row, j) = replaceValue
-                Case vbContains
-                    If InStr(CellValue, findValue) > 0 Then C_Arr(row, j) = replaceValue
-                Case vbStartsWith
-                    If Left(CellValue, Len(findValue)) = findValue Then C_Arr(row, j) = replaceValue
-                Case vbEndsWith
-                    If Right(CellValue, Len(findValue)) = findValue Then C_Arr(row, j) = replaceValue
-                Case Else
-                    Err.Raise vbObjectError + 2083, , "Invalid replace operator."
-            End Select
-            On Error GoTo 0
-            GoTo ContinueLoop
-ReplaceFailed:
-            ReplaceErrors.Add "Row " & row & ", Col " & j & ": '" & C_Arr(row, j) & "'"
-            Resume ContinueLoop
+            CellValue = CStr(C_Arr(rowNum, j))
+            If TrimBeforeReplace Then CellValue = Trim(CellValue)
 
+            For k = LBound(findArr) To UBound(findArr)
+                searchValue = CStr(findArr(k))
+
+                If IsReplacable(CellValue, searchValue, operatorType, compareMode) Then
+                    If ReplaceWithin Then
+                        C_Arr(rowNum, j) = Replace(CellValue, searchValue, CStr(replaceValue), , , compareMode)
+                    Else
+                        C_Arr(rowNum, j) = replaceValue
+                    End If
+                    Exit For
+                End If
+            Next k
+
+            On Error GoTo 0
 ContinueLoop:
         Next j
     Next i
 
     If C_Ref <> "" Then C_Dict(C_Ref) = C_Arr
 
-    ' Optional: Display or handle errors
     If ReplaceErrors.Count > 0 Then
         Dim msg As String: msg = "Replacement failed for the following cells:" & vbCrLf
-        For Each CellValue In ReplaceErrors
-            msg = msg & CellValue & vbCrLf
+        Dim FailedCells As Variant
+        For Each FailedCells In ReplaceErrors
+            msg = msg & FailedCells & vbCrLf
         Next
         MsgBox msg, vbExclamation, "Replacement Errors"
     End If
+    Exit Sub
+
+ReplaceFailed:
+    ReplaceErrors.Add "Row " & rowNum & ", Col " & j & ": '" & C_Arr(rowNum, j) & "'"
+    Resume ContinueLoop
 End Sub
 
-Public Sub ReplaceAll(ByVal findValue As String, _
+Public Sub ReplaceAll(ByVal findValues As Variant, _
                       ByVal replaceValue As Variant, _
-                      Optional ByVal operatorType As vbReplaceOperator = vbEquals)
+                      Optional TrimBeforeReplace As Boolean = False, _
+                      Optional ReplaceWithin As Boolean = False, _
+                      Optional ByVal operatorType As vbReplaceOperator = vbEquals, _
+                      Optional compareMode As VbCompareMethod = vbTextCompare)
 
-    Dim i As Long, j As Long
+    Dim i As Long, j As Long, k As Long
     Dim totalRows As Long, totalCols As Long
+    Dim findArr As Variant
     Dim ReplaceErrors As Collection
-    Dim CellValue As Variant
+    Dim CellValue As String, searchValue As String
 
-    If Not IsArray(C_Arr) Then Err.Raise vbObjectError + 2084, , "Array not initialized."
+    If Not IsArray(C_Arr) Then Err.Raise vbObjectError + 2076, , "Array not initialized."
+    findArr = IIf(IsArray(findValues), findValues, Array(findValues))
 
     totalRows = UBound(C_Arr, 1)
     totalCols = UBound(C_Arr, 2)
@@ -2270,42 +2552,45 @@ Public Sub ReplaceAll(ByVal findValue As String, _
         For j = 1 To totalCols
             On Error GoTo ReplaceFailed
             CellValue = CStr(C_Arr(i, j))
-            Select Case operatorType
-                Case vbEquals
-                    If CellValue = findValue Then C_Arr(i, j) = replaceValue
-                Case vbContains
-                    If InStr(CellValue, findValue) > 0 Then C_Arr(i, j) = replaceValue
-                Case vbStartsWith
-                    If Left(CellValue, Len(findValue)) = findValue Then C_Arr(i, j) = replaceValue
-                Case vbEndsWith
-                    If Right(CellValue, Len(findValue)) = findValue Then C_Arr(i, j) = replaceValue
-                Case Else
-                    Err.Raise vbObjectError + 2085, , "Invalid replace operator."
-            End Select
-            On Error GoTo 0
-            GoTo ContinueLoop
-ReplaceFailed:
-            ReplaceErrors.Add "Row " & i & ", Col " & j & ": '" & C_Arr(i, j) & "'"
-            Resume ContinueLoop
+            If TrimBeforeReplace Then CellValue = Trim(CellValue)
 
+            For k = LBound(findArr) To UBound(findArr)
+                searchValue = CStr(findArr(k))
+
+                If IsReplacable(CellValue, searchValue, operatorType, compareMode) Then
+                    If ReplaceWithin Then
+                        C_Arr(i, j) = Replace(CellValue, searchValue, CStr(replaceValue), , , compareMode)
+                    Else
+                        C_Arr(i, j) = replaceValue
+                    End If
+                    Exit For
+                End If
+            Next k
+
+            On Error GoTo 0
 ContinueLoop:
         Next j
     Next i
 
     If C_Ref <> "" Then C_Dict(C_Ref) = C_Arr
 
-    ' Optional: Display or handle errors
     If ReplaceErrors.Count > 0 Then
         Dim msg As String: msg = "Replacement failed for the following cells:" & vbCrLf
-        For Each CellValue In ReplaceErrors
-            msg = msg & CellValue & vbCrLf
+        Dim FailedCells As Variant
+        For Each FailedCells In ReplaceErrors
+            msg = msg & FailedCells & vbCrLf
         Next
         MsgBox msg, vbExclamation, "Replacement Errors"
     End If
+    Exit Sub
+
+ReplaceFailed:
+    ReplaceErrors.Add "Row " & i & ", Col " & j & ": '" & C_Arr(i, j) & "'"
+    Resume ContinueLoop
 End Sub
 
-Public Sub AddCalculatedColumn(pos As Long, _
-                               ByRef ColIndexes() As Variant, _
+Public Sub AddCalculatedColumn(Field As Long, _
+                               ByRef colIndexes() As Variant, _
                                ByVal operatorType As vbMathOperator)
 
     Dim i As Long, j As Long, n As Long
@@ -2323,25 +2608,25 @@ Public Sub AddCalculatedColumn(pos As Long, _
     totalRows = r2 - r1 + 1
     totalCols = c2 - c1 + 1
 
-    If pos < 1 Or pos > totalCols + 1 Then
-        Err.Raise vbObjectError + 2063, , "Pos is out of Column Bound: " & pos
+    If Field < 1 Or Field > totalCols + 1 Then
+        Err.Raise vbObjectError + 2063, , "Field is out of Column Bound: " & Field
     End If
 
-    InsertColAt = c1 + pos - 1
+    InsertColAt = c1 + Field - 1
     ReDim resultArr(r1 To r2, c1 To c2 + 1)
 
     For i = r1 To r2
-        ' Copy columns before the insert position
+        ' Copy columns before the insert Fieldition
         For j = c1 To InsertColAt - 1
             resultArr(i, j) = C_Arr(i, j)
         Next j
 
         ' Calculate new column value
         Dim Value As Double
-        Value = val(C_Arr(i, ColIndexes(LBound(ColIndexes))))
+        Value = Val(C_Arr(i, colIndexes(LBound(colIndexes))))
 
-        For j = LBound(ColIndexes) + 1 To UBound(ColIndexes)
-            Dim nextVal As Double: nextVal = val(C_Arr(i, ColIndexes(j)))
+        For j = LBound(colIndexes) + 1 To UBound(colIndexes)
+            Dim nextVal As Double: nextVal = Val(C_Arr(i, colIndexes(j)))
             Select Case operatorType
                 Case vbAdd:       Value = Value + nextVal
                 Case vbSubtract:  Value = Value - nextVal
@@ -2355,7 +2640,7 @@ Public Sub AddCalculatedColumn(pos As Long, _
 
         resultArr(i, InsertColAt) = Value
 
-        ' Copy columns after the insert position
+        ' Copy columns after the insert Fieldition
         For j = InsertColAt To c2
             resultArr(i, j + 1) = C_Arr(i, j)
         Next j
@@ -2388,21 +2673,22 @@ Private Function ValToArray(ArrValue As Variant, LengthOfArray As Long, Optional
     ValToArray = returnArr
 End Function
 
-Public Sub AddConditionalColumn(ByVal pos As Long, _
+Public Sub AddConditionalColumn(ByVal Field As Long, _
                                 ByVal ColIndex As Variant, _
                                 ByVal criteria As Variant, _
                                 ByVal TrueValue As Variant, _
                                 Optional ByVal FalseValue As Variant, _
-                                Optional ByVal MatchMode As Variant = vbTextEquals, _
+                                Optional ByVal matchmode As Variant = vbTextEquals, _
                                 Optional CompareMethod As VbCompareMethod = vbBinaryCompare, _
-                                Optional InvertMatch As Boolean = False)
+                                Optional InvertMatch As Boolean = False, _
+                                Optional UserLogic As vbFilterLogic = vbLogicAnd)
 
     Dim i As Long, j As Long, n As Long
     Dim totalRows As Long, totalCols As Long
     Dim resultArr() As Variant, colIndexArr As Variant, criteriaArr As Variant, MatchModeArr As Variant
     Dim TrueValueArr As Variant, FalseValueArr As Variant
     Dim r1 As Long, r2 As Long, c1 As Long, c2 As Long, InsertColAt As Long
-    Dim bool As Boolean
+    Dim Bool As Boolean
 
     If Not IsArray(C_Arr) Then Err.Raise vbObjectError + 2065, , "Array not initialized."
 
@@ -2411,11 +2697,19 @@ Public Sub AddConditionalColumn(ByVal pos As Long, _
 
     totalRows = r2 - r1 + 1
     totalCols = c2 - c1 + 1
-    If pos < 1 Or pos > totalCols + 1 Then Err.Raise vbObjectError + 2062, , "Pos is out of Column Bound: " & pos
+    If Field < 1 Or Field > totalCols + 1 Then Err.Raise vbObjectError + 2062, , "Field is out of Column Bound: " & Field
 
     colIndexArr = NormalizeToArray(ColIndex)
-    criteriaArr = NormalizeCriteria(colIndexArr, criteria, totalRows)
-    MatchModeArr = NormalizeMatchMode(colIndexArr, MatchMode)
+    criteriaArr = IIf(IsArray(criteria), criteria, Array(criteria))
+    MatchModeArr = NormalizeMatchMode(colIndexArr, matchmode)
+    
+    If DimensionOfArray(colIndexArr) > 1 Or DimensionOfArray(criteriaArr) > 1 Then
+        Err.Raise vbObjectError + 2050, , "Both colIndex and criteria must be 1D arrays or a pair of Single Variables."
+    End If
+    
+    If UBound(colIndexArr) - LBound(colIndexArr) <> UBound(criteriaArr) - LBound(criteriaArr) Then
+        Err.Raise vbObjectError + 2051, , "colIndex and criteria must be of equal length."
+    End If
     
     ' Prepare TrueValueArr
     If IsArray(TrueValue) Then
@@ -2443,7 +2737,226 @@ Public Sub AddConditionalColumn(ByVal pos As Long, _
         FalseValueArr = Convert2D(ValToArray(Empty, totalRows, False), vbToCol)
     End If
 
-    InsertColAt = c1 + pos - 1
+    InsertColAt = c1 + Field - 1
+    ReDim resultArr(r1 To r2, c1 To c2 + 1)
+
+    For i = r1 To r2
+        ' Copy columns before the insert Fieldition
+        For j = c1 To InsertColAt - 1
+            resultArr(i, j) = C_Arr(i, j)
+        Next j
+    
+        ' Evaluate condition with AND or OR logic
+        Select Case UserLogic
+            Case vbLogicAnd
+                Bool = True
+                For n = LBound(colIndexArr) To UBound(colIndexArr)
+                    If Not IsMatch(C_Arr(i, colIndexArr(n)), criteriaArr(n), MatchModeArr(n), CompareMethod) Then
+                        Bool = False
+                        Exit For
+                    End If
+                Next n
+            Case vbLogicOr
+                Bool = False
+                For n = LBound(colIndexArr) To UBound(colIndexArr)
+                    If IsMatch(C_Arr(i, colIndexArr(n)), criteriaArr(n), MatchModeArr(n), CompareMethod) Then
+                        Bool = True
+                        Exit For
+                    End If
+                Next n
+            Case Else
+                Err.Raise vbObjectError + 2082, , "Invalid logic type."
+        End Select
+        
+        If InvertMatch Then Bool = Not Bool
+
+        ' Insert conditional value
+        resultArr(i, InsertColAt) = IIf(Bool, TrueValueArr(i, 1), FalseValueArr(i, 1))
+
+        ' Copy columns after the insert Fieldition
+        For j = InsertColAt To c2
+            resultArr(i, j + 1) = C_Arr(i, j)
+        Next j
+    Next i
+
+    ' Update internal array and dictionary
+    C_Arr = resultArr
+    If C_Ref <> "" Then C_Dict(C_Ref) = C_Arr
+End Sub
+    
+Public Sub AddComparitiveColumn(ByVal Field As Long, _
+                                ByVal ColIndex As Variant, _
+                                ByVal CompareCol As Variant, _
+                                ByVal TrueValue As Variant, _
+                                Optional ByVal FalseValue As Variant, _
+                                Optional ByVal matchmode As Variant = vbTextEquals, _
+                                Optional CompareMethod As VbCompareMethod = vbBinaryCompare, _
+                                Optional InvertMatch As Boolean = False, _
+                                Optional UserLogic As vbFilterLogic = vbLogicAnd)
+
+    Dim i As Long, j As Long, n As Long
+    Dim totalRows As Long, totalCols As Long
+    Dim resultArr() As Variant, colIndexArr As Variant, CompareColArr As Variant, MatchModeArr As Variant
+    Dim TrueValueArr As Variant, FalseValueArr As Variant
+    Dim r1 As Long, r2 As Long, c1 As Long, c2 As Long, InsertColAt As Long
+    Dim Bool As Boolean
+
+    If Not IsArray(C_Arr) Then Err.Raise vbObjectError + 2065, , "Array not initialized."
+
+    r1 = LBound(C_Arr, 1): r2 = UBound(C_Arr, 1)
+    c1 = LBound(C_Arr, 2): c2 = UBound(C_Arr, 2)
+
+    totalRows = r2 - r1 + 1
+    totalCols = c2 - c1 + 1
+    If Field < 1 Or Field > totalCols + 1 Then Err.Raise vbObjectError + 2062, , "Field is out of Column Bound: " & Field
+
+    colIndexArr = NormalizeToArray(ColIndex)
+    CompareColArr = NormalizeToArray(CompareCol)
+    MatchModeArr = NormalizeMatchMode(colIndexArr, matchmode)
+
+    If DimensionOfArray(colIndexArr) > 1 Or DimensionOfArray(CompareColArr) > 1 Then
+        Err.Raise vbObjectError + 2050, , "Both colIndex and CompareCol must be 1D arrays or single values."
+    End If
+
+    If UBound(colIndexArr) - LBound(colIndexArr) <> UBound(CompareColArr) - LBound(CompareColArr) Then
+        Err.Raise vbObjectError + 2051, , "colIndex and CompareCol must be of equal length."
+    End If
+
+    ' Prepare TrueValueArr
+    If IsArray(TrueValue) Then
+        If DimensionOfArray(TrueValue) = 2 Then
+            TrueValueArr = TrueValue
+        Else
+            TrueValueArr = Convert2D(ValToArray(TrueValue, totalRows, False), vbToCol)
+        End If
+    Else
+        TrueValueArr = Convert2D(ValToArray(TrueValue, totalRows, False), vbToCol)
+    End If
+
+    ' Prepare FalseValueArr
+    If Not IsMissing(FalseValue) Then
+        If IsArray(FalseValue) Then
+            If DimensionOfArray(FalseValue) = 2 Then
+                FalseValueArr = FalseValue
+            Else
+                FalseValueArr = Convert2D(ValToArray(FalseValue, totalRows, False), vbToCol)
+            End If
+        Else
+            FalseValueArr = Convert2D(ValToArray(FalseValue, totalRows, False), vbToCol)
+        End If
+    Else
+        FalseValueArr = Convert2D(ValToArray(Empty, totalRows, False), vbToCol)
+    End If
+
+    InsertColAt = c1 + Field - 1
+    ReDim resultArr(r1 To r2, c1 To c2 + 1)
+
+    For i = r1 To r2
+        ' Copy columns before the insert Fieldition
+        For j = c1 To InsertColAt - 1
+            resultArr(i, j) = C_Arr(i, j)
+        Next j
+
+        ' Evaluate condition with AND or OR logic
+        Select Case UserLogic
+            Case vbLogicAnd
+                Bool = True
+                For n = LBound(colIndexArr) To UBound(colIndexArr)
+                    If Not IsMatch(C_Arr(i, colIndexArr(n)), CompareColArr(n), MatchModeArr(n), CompareMethod) Then
+                        Bool = False
+                        Exit For
+                    End If
+                Next n
+            Case vbLogicOr
+                Bool = False
+                For n = LBound(colIndexArr) To UBound(colIndexArr)
+                    If IsMatch(C_Arr(i, colIndexArr(n)), CompareColArr(n), MatchModeArr(n), CompareMethod) Then
+                        Bool = True
+                        Exit For
+                    End If
+                Next n
+            Case Else
+                Err.Raise vbObjectError + 2082, , "Invalid logic type."
+        End Select
+
+        If InvertMatch Then Bool = Not Bool
+
+        ' Insert conditional value
+        resultArr(i, InsertColAt) = IIf(Bool, TrueValueArr(i, 1), FalseValueArr(i, 1))
+
+        ' Copy columns after the insert Fieldition
+        For j = InsertColAt To c2
+            resultArr(i, j + 1) = C_Arr(i, j)
+        Next j
+    Next i
+
+    ' Update internal array and dictionary
+    C_Arr = resultArr
+    If C_Ref <> "" Then C_Dict(C_Ref) = C_Arr
+End Sub
+
+Public Sub AddConditionalComparitiveColumn(ByVal Field As Long, _
+                                ByVal ColIndexCriteria As Variant, _
+                                ByVal criteria As Variant, _
+                                ByVal ColIndexCompare As Variant, _
+                                ByVal CompareCol As Variant, _
+                                ByVal TrueValue As Variant, _
+                                Optional ByVal FalseValue As Variant, _
+                                Optional ByVal matchmode As Variant = vbTextEquals, _
+                                Optional CompareMethod As VbCompareMethod = vbBinaryCompare, _
+                                Optional InvertMatch As Boolean = False, _
+                                Optional UserLogic As vbFilterLogic = vbLogicAnd)
+
+    Dim i As Long, j As Long, n As Long
+    Dim totalRows As Long, totalCols As Long
+    Dim resultArr() As Variant, ColIndexCriteriaArr As Variant, ColIndexCompareArr As Variant
+    Dim criteriaArr As Variant, CompareColArr As Variant, MatchModeArr As Variant
+    Dim TrueValueArr As Variant, FalseValueArr As Variant
+    Dim r1 As Long, r2 As Long, c1 As Long, c2 As Long, InsertColAt As Long
+    Dim Bool As Boolean
+
+    If Not IsArray(C_Arr) Then Err.Raise vbObjectError + 2065, , "Array not initialized."
+
+    r1 = LBound(C_Arr, 1): r2 = UBound(C_Arr, 1)
+    c1 = LBound(C_Arr, 2): c2 = UBound(C_Arr, 2)
+
+    totalRows = r2 - r1 + 1
+    totalCols = c2 - c1 + 1
+    If Field < 1 Or Field > totalCols + 1 Then Err.Raise vbObjectError + 2062, , "Field is out of Column Bound: " & Field
+
+    ColIndexCriteriaArr = NormalizeToArray(ColIndexCriteria)
+    criteriaArr = IIf(IsArray(criteria), criteria, Array(criteria))
+    ColIndexCompareArr = NormalizeToArray(ColIndexCompare)
+    CompareColArr = NormalizeToArray(CompareCol)
+    MatchModeArr = NormalizeMatchMode(ColIndexCriteriaArr, matchmode)
+
+    If DimensionOfArray(ColIndexCriteriaArr) > 1 Or DimensionOfArray(criteriaArr) > 1 Then
+        Err.Raise vbObjectError + 2050, , "Both colIndex and criteria must be 1D arrays or a pair of Single Variables."
+    End If
+    
+    If UBound(ColIndexCriteriaArr) - LBound(ColIndexCriteriaArr) <> UBound(criteriaArr) - LBound(criteriaArr) Then
+        Err.Raise vbObjectError + 2051, , "colIndex and criteria must be of equal length."
+    End If
+    
+    If DimensionOfArray(ColIndexCompareArr) > 1 Or DimensionOfArray(CompareColArr) > 1 Then
+        Err.Raise vbObjectError + 2050, , "Both colIndex and CompareCol must be 1D arrays or single values."
+    End If
+
+    If UBound(ColIndexCompareArr) - LBound(ColIndexCompareArr) <> UBound(CompareColArr) - LBound(CompareColArr) Then
+        Err.Raise vbObjectError + 2051, , "colIndex and CompareCol must be of equal length."
+    End If
+
+    ' Prepare TrueValueArr
+    TrueValueArr = Convert2D(ValToArray(TrueValue, totalRows, False), vbToCol)
+
+    ' Prepare FalseValueArr
+    If Not IsMissing(FalseValue) Then
+        FalseValueArr = Convert2D(ValToArray(FalseValue, totalRows, False), vbToCol)
+    Else
+        FalseValueArr = Convert2D(ValToArray(Empty, totalRows, False), vbToCol)
+    End If
+
+    InsertColAt = c1 + Field - 1
     ReDim resultArr(r1 To r2, c1 To c2 + 1)
 
     For i = r1 To r2
@@ -2452,23 +2965,48 @@ Public Sub AddConditionalColumn(ByVal pos As Long, _
             resultArr(i, j) = C_Arr(i, j)
         Next j
 
-        ' Evaluate condition
-        bool = True
-        For n = LBound(colIndexArr) To UBound(colIndexArr)
-            Dim critVal As Variant
-            If IsArray(criteriaArr(n)) Then
-                critVal = criteriaArr(n)(i)
-            ElseIf DimensionOfArray(criteriaArr) = 2 Then
-                critVal = criteriaArr(i, 1)
-            Else
-                critVal = criteriaArr(n)
-            End If
-            bool = bool And IsMatch(C_Arr(i, colIndexArr(n)), critVal, MatchModeArr(n), CompareMethod)
-        Next n
-        If InvertMatch Then bool = Not bool
+        ' Evaluate condition with AND or OR logic
+        Select Case UserLogic
+            Case vbLogicAnd
+                Bool = True
+                ' Criteria checks
+                For n = LBound(ColIndexCriteriaArr) To UBound(ColIndexCriteriaArr)
+                    If Not IsMatch(C_Arr(i, ColIndexCriteriaArr(n)), criteriaArr(n), MatchModeArr(n), CompareMethod) Then
+                        Bool = False: Exit For
+                    End If
+                Next n
+                ' Comparative checks
+                If Bool Then
+                    For n = LBound(ColIndexCompareArr) To UBound(ColIndexCompareArr)
+                        If Not IsMatch(C_Arr(i, ColIndexCompareArr(n)), C_Arr(i, CompareColArr(n)), MatchModeArr(n), CompareMethod) Then
+                            Bool = False: Exit For
+                        End If
+                    Next n
+                End If
+            Case vbLogicOr
+                Bool = False
+                ' Criteria checks
+                For n = LBound(ColIndexCriteriaArr) To UBound(ColIndexCriteriaArr)
+                    If IsMatch(C_Arr(i, ColIndexCriteriaArr(n)), criteriaArr(n), MatchModeArr(n), CompareMethod) Then
+                        Bool = True: Exit For
+                    End If
+                Next n
+                ' Comparative checks
+                If Not Bool Then
+                    For n = LBound(ColIndexCompareArr) To UBound(ColIndexCompareArr)
+                        If IsMatch(C_Arr(i, ColIndexCompareArr(n)), C_Arr(i, CompareColArr(n)), MatchModeArr(n), CompareMethod) Then
+                            Bool = True: Exit For
+                        End If
+                    Next n
+                End If
+            Case Else
+                Err.Raise vbObjectError + 2082, , "Invalid logic type."
+        End Select
+
+        If InvertMatch Then Bool = Not Bool
 
         ' Insert conditional value
-        resultArr(i, InsertColAt) = IIf(bool, TrueValueArr(i, 1), FalseValueArr(i, 1))
+        resultArr(i, InsertColAt) = IIf(Bool, TrueValueArr(i, 1), FalseValueArr(i, 1))
 
         ' Copy columns after the insert position
         For j = InsertColAt To c2
@@ -2480,18 +3018,18 @@ Public Sub AddConditionalColumn(ByVal pos As Long, _
     C_Arr = resultArr
     If C_Ref <> "" Then C_Dict(C_Ref) = C_Arr
 End Sub
-            
-Public Sub AddCopiedColumns(ByVal pos As Long, ByVal ColumnsToCopy As Variant)
+
+Public Sub CopyCols(ByVal Field As Long, ByVal ColumnsToCopy As Variant)
     Dim i As Long, j As Long, k As Long
     Dim totalRows As Long, totalCols As Long
     Dim resultArr() As Variant
     Dim r1 As Long, r2 As Long, c1 As Long, c2 As Long
     Dim InsertColAt As Long
-    Dim copyCols() As Variant
+    Dim CopyCols() As Variant
 
     If Not IsArray(C_Arr) Then Err.Raise vbObjectError + 2065, , "Array not initialized."
 
-    copyCols = NormalizeToArray(ColumnsToCopy)
+    CopyCols = NormalizeToArray(ColumnsToCopy)
 
     r1 = LBound(C_Arr, 1): r2 = UBound(C_Arr, 1)
     c1 = LBound(C_Arr, 2): c2 = UBound(C_Arr, 2)
@@ -2499,34 +3037,34 @@ Public Sub AddCopiedColumns(ByVal pos As Long, ByVal ColumnsToCopy As Variant)
     totalRows = r2 - r1 + 1
     totalCols = c2 - c1 + 1
 
-    If pos < 1 Or pos > totalCols + 1 Then
-        Err.Raise vbObjectError + 2062, , "Insert position out of bounds: " & pos
+    If Field < 1 Or Field > totalCols + 1 Then
+        Err.Raise vbObjectError + 2062, , "Insert Fieldition out of bounds: " & Field
     End If
 
     ' Validate all columns to copy
-    For k = LBound(copyCols) To UBound(copyCols)
-        If copyCols(k) < 1 Or copyCols(k) > totalCols Then
-            Err.Raise vbObjectError + 2063, , "ColumnToCopy out of bounds: " & copyCols(k)
+    For k = LBound(CopyCols) To UBound(CopyCols)
+        If CopyCols(k) < 1 Or CopyCols(k) > totalCols Then
+            Err.Raise vbObjectError + 2063, , "ColumnToCopy out of bounds: " & CopyCols(k)
         End If
     Next k
 
-    InsertColAt = c1 + pos - 1
-    ReDim resultArr(r1 To r2, c1 To c2 + UBound(copyCols) - LBound(copyCols) + 1)
+    InsertColAt = c1 + Field - 1
+    ReDim resultArr(r1 To r2, c1 To c2 + UBound(CopyCols) - LBound(CopyCols) + 1)
 
     For i = r1 To r2
-        ' Copy columns before the insert position
+        ' Copy columns before the insert Fieldition
         For j = c1 To InsertColAt - 1
             resultArr(i, j) = C_Arr(i, j)
         Next j
 
         ' Insert copied columns
-        For k = LBound(copyCols) To UBound(copyCols)
-            resultArr(i, InsertColAt + k - LBound(copyCols)) = C_Arr(i, c1 + copyCols(k) - 1)
+        For k = LBound(CopyCols) To UBound(CopyCols)
+            resultArr(i, InsertColAt + k - LBound(CopyCols)) = C_Arr(i, c1 + CopyCols(k) - 1)
         Next k
 
-        ' Copy columns after the insert position
+        ' Copy columns after the insert Fieldition
         For j = InsertColAt To c2
-            resultArr(i, j + UBound(copyCols) - LBound(copyCols) + 1) = C_Arr(i, j)
+            resultArr(i, j + UBound(CopyCols) - LBound(CopyCols) + 1) = C_Arr(i, j)
         Next j
     Next i
 
@@ -2534,17 +3072,17 @@ Public Sub AddCopiedColumns(ByVal pos As Long, ByVal ColumnsToCopy As Variant)
     If C_Ref <> "" Then C_Dict(C_Ref) = C_Arr
 End Sub
 
-Public Sub AddCopiedRows(ByVal pos As Long, ByVal RowsToCopy As Variant)
+Public Sub CopyRows(ByVal Field As Long, ByVal RowsToCopy As Variant)
     Dim i As Long, j As Long, k As Long
     Dim totalRows As Long, totalCols As Long
     Dim resultArr() As Variant
     Dim r1 As Long, r2 As Long, c1 As Long, c2 As Long
     Dim InsertRowAt As Long
-    Dim copyRows() As Variant
+    Dim CopyRows() As Variant
 
     If Not IsArray(C_Arr) Then Err.Raise vbObjectError + 2070, , "Array not initialized."
 
-    copyRows = NormalizeToArray(RowsToCopy)
+    CopyRows = NormalizeToArray(RowsToCopy)
 
     r1 = LBound(C_Arr, 1): r2 = UBound(C_Arr, 1)
     c1 = LBound(C_Arr, 2): c2 = UBound(C_Arr, 2)
@@ -2552,34 +3090,34 @@ Public Sub AddCopiedRows(ByVal pos As Long, ByVal RowsToCopy As Variant)
     totalRows = r2 - r1 + 1
     totalCols = c2 - c1 + 1
 
-    If pos < 1 Or pos > totalRows + 1 Then
-        Err.Raise vbObjectError + 2071, , "Insert position out of bounds: " & pos
+    If Field < 1 Or Field > totalRows + 1 Then
+        Err.Raise vbObjectError + 2071, , "Insert Fieldition out of bounds: " & Field
     End If
 
     ' Validate all rows to copy
-    For k = LBound(copyRows) To UBound(copyRows)
-        If copyRows(k) < 1 Or copyRows(k) > totalRows Then
-            Err.Raise vbObjectError + 2072, , "RowToCopy out of bounds: " & copyRows(k)
+    For k = LBound(CopyRows) To UBound(CopyRows)
+        If CopyRows(k) < 1 Or CopyRows(k) > totalRows Then
+            Err.Raise vbObjectError + 2072, , "RowToCopy out of bounds: " & CopyRows(k)
         End If
     Next k
 
-    InsertRowAt = r1 + pos - 1
-    ReDim resultArr(r1 To r2 + UBound(copyRows) - LBound(copyRows) + 1, c1 To c2)
+    InsertRowAt = r1 + Field - 1
+    ReDim resultArr(r1 To r2 + UBound(CopyRows) - LBound(CopyRows) + 1, c1 To c2)
 
     For j = c1 To c2
-        ' Copy rows before the insert position
+        ' Copy rows before the insert Fieldition
         For i = r1 To InsertRowAt - 1
             resultArr(i, j) = C_Arr(i, j)
         Next i
 
         ' Insert copied rows
-        For k = LBound(copyRows) To UBound(copyRows)
-            resultArr(InsertRowAt + k - LBound(copyRows), j) = C_Arr(r1 + copyRows(k) - 1, j)
+        For k = LBound(CopyRows) To UBound(CopyRows)
+            resultArr(InsertRowAt + k - LBound(CopyRows), j) = C_Arr(r1 + CopyRows(k) - 1, j)
         Next k
 
-        ' Copy rows after the insert position
+        ' Copy rows after the insert Fieldition
         For i = InsertRowAt To r2
-            resultArr(i + UBound(copyRows) - LBound(copyRows) + 1, j) = C_Arr(i, j)
+            resultArr(i + UBound(CopyRows) - LBound(CopyRows) + 1, j) = C_Arr(i, j)
         Next i
     Next j
 
@@ -2619,7 +3157,7 @@ Public Function ConcatenateRows(ByRef RowIndexes() As Long, ByVal delimiter As S
         Next i
 
         If Len(concatStr) > 0 Then
-            resultArr(j) = Left(concatStr, Len(concatStr) - Len(delimiter)) ' remove trailing delimiter
+            resultArr(j) = left(concatStr, Len(concatStr) - Len(delimiter)) ' remove trailing delimiter
         Else
             resultArr(j) = ""
         End If
@@ -2633,7 +3171,7 @@ Public Function ConcatenateRows(ByRef RowIndexes() As Long, ByVal delimiter As S
     Set ConcatenateRows = arrObj
 End Function
 
-Public Function ConcatenateColumns(ByRef ColIndexes() As Long, ByVal delimiter As String, Optional ByVal SkipEmpty As Boolean = False) As Arrays
+Public Function ConcatenateColumns(colIndexes As Variant, ByVal delimiter As String, Optional ByVal SkipEmpty As Boolean = False) As Arrays
     Dim i As Long, j As Long
     Dim totalRows As Long, totalCols As Long
     Dim resultArr() As Variant
@@ -2650,13 +3188,13 @@ Public Function ConcatenateColumns(ByRef ColIndexes() As Long, ByVal delimiter A
 
     For i = 1 To totalRows
         Dim concatStr As String: concatStr = ""
-        For j = LBound(ColIndexes) To UBound(ColIndexes)
-            Dim col As Long: col = ColIndexes(j)
-            If col < 1 Or col > totalCols Then
-                Err.Raise vbObjectError + 2085, , "Column index out of bounds: " & col
+        For j = LBound(colIndexes) To UBound(colIndexes)
+            Dim Col As Long: Col = colIndexes(j)
+            If Col < 1 Or Col > totalCols Then
+                Err.Raise vbObjectError + 2085, , "Column index out of bounds: " & Col
             End If
 
-            Dim cellVal As String: cellVal = Trim(CStr(C_Arr(i, col)))
+            Dim cellVal As String: cellVal = Trim(CStr(C_Arr(i, Col)))
             If SkipEmpty And Len(cellVal) = 0 Then
                 ' Skip empty cells
             Else
@@ -2665,7 +3203,7 @@ Public Function ConcatenateColumns(ByRef ColIndexes() As Long, ByVal delimiter A
         Next j
 
         If Len(concatStr) > 0 Then
-            resultArr(i) = Left(concatStr, Len(concatStr) - Len(delimiter)) ' remove trailing delimiter
+            resultArr(i) = left(concatStr, Len(concatStr) - Len(delimiter)) ' remove trailing delimiter
         Else
             resultArr(i) = ""
         End If
@@ -2712,7 +3250,7 @@ Public Sub RearrangeRows(ByVal originalRows As Variant, ByVal targetRows As Vari
             Err.Raise vbObjectError + 2096, , "Duplicate target row: " & targetRow
         End If
         If origRow < 1 Or origRow > totalRows Or targetRow < 1 Or targetRow > totalRows Then
-            Err.Raise vbObjectError + 2097, , "Row index out of bounds at position " & i
+            Err.Raise vbObjectError + 2097, , "Row index out of bounds at Fieldition " & i
         End If
 
         rowMap(targetRow) = origRow
@@ -2770,7 +3308,7 @@ Public Sub RearrangeCols(ByVal originalCols As Variant, ByVal targetCols As Vari
             Err.Raise vbObjectError + 2109, , "Duplicate target column: " & targetCol
         End If
         If origCol < 1 Or origCol > totalCols Or targetCol < 1 Or targetCol > totalCols Then
-            Err.Raise vbObjectError + 2110, , "Column index out of bounds at position " & i
+            Err.Raise vbObjectError + 2110, , "Column index out of bounds at Fieldition " & i
         End If
 
         colMap(targetCol) = origCol
@@ -2820,7 +3358,7 @@ Public Sub SwapRows(ByVal row1 As Variant, ByVal row2 As Variant)
     For i = LBound(row1Arr) To UBound(row1Arr)
         If row1Arr(i) < 1 Or row1Arr(i) > totalRows Or _
            row2Arr(i) < 1 Or row2Arr(i) > totalRows Then
-            Err.Raise vbObjectError + 2098, , "Row index out of bounds at position " & i & "."
+            Err.Raise vbObjectError + 2098, , "Row index out of bounds at Fieldition " & i & "."
         End If
     Next i
 
@@ -2860,7 +3398,7 @@ Public Sub SwapCols(ByVal col1 As Variant, ByVal col2 As Variant)
     For i = LBound(col1Arr) To UBound(col1Arr)
         If col1Arr(i) < 1 Or col1Arr(i) > totalCols Or _
            col2Arr(i) < 1 Or col2Arr(i) > totalCols Then
-            Err.Raise vbObjectError + 2102, , "Column index out of bounds at position " & i & "."
+            Err.Raise vbObjectError + 2102, , "Column index out of bounds at Fieldition " & i & "."
         End If
     Next i
 
@@ -2876,21 +3414,48 @@ Public Sub SwapCols(ByVal col1 As Variant, ByVal col2 As Variant)
     If C_Ref <> "" Then C_Dict(C_Ref) = C_Arr
 End Sub
 
-Public Sub SortByColumns(ByVal ColIndexes As Variant, Optional ByVal descendingFlags As Variant)
-    Dim i As Long, j As Long
+Private Function NormalizeDescFlags(descendingFlags As Variant, colArr() As Variant) As Variant
+    Dim i As Long
+    
+    If IsArray(descendingFlags) Then
+        Dim flag As Variant
+        For Each flag In descendingFlags
+            If VarType(flag) <> vbBoolean Then
+                Err.Raise vbObjectError + 2102, , "Expected a Boolean: " & CStr(flag)
+            End If
+        Next flag
+        
+        If UBound(descendingFlags) - LBound(descendingFlags) <> UBound(colArr) - LBound(colArr) Then
+            Err.Raise vbObjectError + 2101, , "Descending flags must match column count."
+        End If
+    
+        NormalizeDescFlags = descendingFlags
+    Else
+        If VarType(descendingFlags) <> vbBoolean Then
+            Err.Raise vbObjectError + 2102, , "Expected a Boolean: " & CStr(descendingFlags)
+        End If
+        
+        Dim descending() As Variant
+        ReDim descending(LBound(colArr) To UBound(colArr))
+        For i = LBound(descending) To UBound(descending)
+            descending(i) = descendingFlags
+        Next i
+        NormalizeDescFlags = descending
+    End If
+End Function
+
+Public Sub SortByColumns(ByVal colIndexes As Variant, Optional ByVal descendingFlags As Variant, Optional SortMethod As vbUserSortMethod = vbUserMergeSort)
     Dim totalRows As Long, totalCols As Long
-    Dim sorter As Object
-    Dim tempArr() As Variant
-    Dim rowKey As String
-    Dim descending() As Boolean
+    Dim colArr() As Variant, descending() As Variant
+    Dim i As Long
 
     If Not IsArray(C_Arr) Then Err.Raise vbObjectError + 2100, , "Array not initialized."
 
     totalRows = UBound(C_Arr, 1)
     totalCols = UBound(C_Arr, 2)
 
-    Dim colArr() As Variant
-    colArr = NormalizeToArray(ColIndexes)
+    ' Normalize column indexes
+    colArr = NormalizeToArray(colIndexes)
 
     ' Normalize descending flags
     If IsMissing(descendingFlags) Then
@@ -2898,47 +3463,160 @@ Public Sub SortByColumns(ByVal ColIndexes As Variant, Optional ByVal descendingF
         For i = LBound(descending) To UBound(descending)
             descending(i) = False
         Next i
-    ElseIf IsArray(descendingFlags) Then
-        descending = descendingFlags
-        If UBound(descending) - LBound(descending) <> UBound(colArr) - LBound(colArr) Then
-            Err.Raise vbObjectError + 2101, , "Descending flags must match column count."
-        End If
     Else
-        ReDim descending(LBound(colArr) To UBound(colArr))
-        For i = LBound(descending) To UBound(descending)
-            descending(i) = descendingFlags
-        Next i
+        descending = NormalizeDescFlags(descendingFlags, colArr)
     End If
-
-    Set sorter = CreateObject("System.Collections.ArrayList")
-
-    ' Build sortable keys
+        
+    ' Build index array for sorting
+    Dim idx() As Long
+    ReDim idx(1 To totalRows)
     For i = 1 To totalRows
-        rowKey = ""
-        For j = LBound(colArr) To UBound(colArr)
-            rowKey = rowKey & Chr(255) & CStr(C_Arr(i, colArr(j)))
-        Next j
-        sorter.Add Array(rowKey, i)
+        idx(i) = i
     Next i
 
-    sorter.Sort
-
-    ' Apply descending if needed
-    For j = UBound(descending) To LBound(descending) Step -1
-        If descending(j) Then sorter.Reverse
-    Next j
+    Select Case SortMethod
+        Case vbUserQuickSort
+            ' Perform QuickSort on index array using custom comparison
+            QuickSort idx, LBound(idx), UBound(idx), colArr, descending
+        Case vbUserMergeSort
+            ' Perform MergeSort on index array using custom comparison
+             MergeSort idx, LBound(idx), UBound(idx), colArr, descending
+        Case Else
+            Err.Raise vbObjectError + 2051, "Sorting method: " & SortMethod & " not supported."
+    End Select
 
     ' Rebuild sorted array
+    Dim tempArr() As Variant
     ReDim tempArr(1 To totalRows, 1 To totalCols)
-    For i = 0 To sorter.Count - 1
-        For j = 1 To totalCols
-            tempArr(i + 1, j) = C_Arr(sorter(i)(1), j)
-        Next j
-    Next i
+    Dim r As Long, c As Long
+    For r = 1 To totalRows
+        For c = 1 To totalCols
+            tempArr(r, c) = C_Arr(idx(r), c)
+        Next c
+    Next r
 
     C_Arr = tempArr
     If C_Ref <> "" Then C_Dict(C_Ref) = C_Arr
 End Sub
+
+'==========================
+' QuickSort Implementation
+'==========================
+
+Private Sub QuickSort(ByRef arr() As Long, low As Long, high As Long, colArr() As Variant, descending() As Variant)
+    Dim i As Long, j As Long, pivot As Long, temp As Long
+    Dim mid As Long
+    
+    Do While low < high
+        ' Median-of-three pivot selection
+        mid = (low + high) \ 2
+        If CompareRows(arr(low), arr(mid), colArr, descending) > 0 Then Swap arr(low), arr(mid)
+        If CompareRows(arr(low), arr(high), colArr, descending) > 0 Then Swap arr(low), arr(high)
+        If CompareRows(arr(mid), arr(high), colArr, descending) > 0 Then Swap arr(mid), arr(high)
+        pivot = arr(mid)
+        
+        i = low
+        j = high
+        Do While i <= j
+            Do While CompareRows(arr(i), pivot, colArr, descending) < 0
+                i = i + 1
+            Loop
+            Do While CompareRows(arr(j), pivot, colArr, descending) > 0
+                j = j - 1
+            Loop
+            If i <= j Then
+                Swap arr(i), arr(j)
+                i = i + 1
+                j = j - 1
+            End If
+        Loop
+        
+        ' Tail recursion elimination: sort smaller partition first
+        If (j - low) < (high - i) Then
+            If low < j Then QuickSort arr, low, j, colArr, descending
+            low = i
+        Else
+            If i < high Then QuickSort arr, i, high, colArr, descending
+            high = j
+        End If
+    Loop
+End Sub
+
+'==========================
+' MergeSort Implementation
+'==========================
+Private Sub MergeSort(ByRef arr() As Long, ByVal left As Long, ByVal right As Long, _
+                      ByRef colArr() As Variant, ByRef descending() As Variant)
+    If left >= right Then Exit Sub
+
+    Dim mid As Long
+    mid = (left + right) \ 2
+
+    MergeSort arr, left, mid, colArr, descending
+    MergeSort arr, mid + 1, right, colArr, descending
+
+    Merge arr, left, mid, right, colArr, descending
+End Sub
+
+Private Sub Merge(ByRef arr() As Long, ByVal left As Long, ByVal mid As Long, ByVal right As Long, _
+                  ByRef colArr() As Variant, ByRef descending() As Variant)
+    Dim temp() As Long
+    Dim i As Long, j As Long, k As Long
+
+    ReDim temp(left To right)
+
+    i = left
+    j = mid + 1
+    k = left
+
+    Do While i <= mid And j <= right
+        If CompareRows(arr(i), arr(j), colArr, descending) <= 0 Then
+            temp(k) = arr(i)
+            i = i + 1
+        Else
+            temp(k) = arr(j)
+            j = j + 1
+        End If
+        k = k + 1
+    Loop
+
+    Do While i <= mid
+        temp(k) = arr(i)
+        i = i + 1
+        k = k + 1
+    Loop
+
+    Do While j <= right
+        temp(k) = arr(j)
+        j = j + 1
+        k = k + 1
+    Loop
+
+    For k = left To right
+        arr(k) = temp(k)
+    Next k
+End Sub
+
+'==========================
+' Row Comparison Logic
+'==========================
+
+Private Function CompareRows(row1 As Long, row2 As Long, colArr() As Variant, descending() As Variant) As Long
+    Dim k As Long, val1 As Variant, val2 As Variant
+    For k = LBound(colArr) To UBound(colArr)
+        val1 = C_Arr(row1, colArr(k))
+        val2 = C_Arr(row2, colArr(k))
+        If val1 <> val2 Then
+            If descending(k) Then
+                CompareRows = IIf(val1 < val2, 1, -1)
+            Else
+                CompareRows = IIf(val1 < val2, -1, 1)
+            End If
+            Exit Function
+        End If
+    Next k
+    CompareRows = 0
+End Function
 
 Public Sub MoveRow(ByVal fromIndex As Long, ByVal toIndex As Long)
     Dim j As Long, temp As Variant
@@ -2961,12 +3639,12 @@ Public Sub MoveRow(ByVal fromIndex As Long, ByVal toIndex As Long)
     ReDim rowMap(1 To totalRows)
 
     ' Build new row order
-    Dim r As Long, pos As Long: pos = 1
+    Dim r As Long, Field As Long: Field = 1
     For r = 1 To totalRows
         If r <> fromIndex Then
-            If pos = toIndex Then pos = pos + 1
-            rowMap(pos) = r
-            pos = pos + 1
+            If Field = toIndex Then Field = Field + 1
+            rowMap(Field) = r
+            Field = Field + 1
         End If
     Next r
     rowMap(toIndex) = fromIndex
@@ -3004,12 +3682,12 @@ Public Sub MoveCol(ByVal fromIndex As Long, ByVal toIndex As Long)
     ReDim colMap(1 To totalCols)
 
     ' Build new column order
-    Dim c As Long, pos As Long: pos = 1
+    Dim c As Long, Field As Long: Field = 1
     For c = 1 To totalCols
         If c <> fromIndex Then
-            If pos = toIndex Then pos = pos + 1
-            colMap(pos) = c
-            pos = pos + 1
+            If Field = toIndex Then Field = Field + 1
+            colMap(Field) = c
+            Field = Field + 1
         End If
     Next c
     colMap(toIndex) = fromIndex
@@ -3025,51 +3703,257 @@ Public Sub MoveCol(ByVal fromIndex As Long, ByVal toIndex As Long)
     If C_Ref <> "" Then C_Dict(C_Ref) = C_Arr
 End Sub
 
-Public Sub Map(ByVal ColIndex As Variant, ByVal valueMap As Object)
+Public Function CreateMap(ByVal keyCol As Long, ItemCol As Variant) As Object
+    Dim retDict As Object
+    Dim itemArr() As Variant
     Dim i As Long, j As Long
-    Dim totalRows As Long, totalCols As Long
-    Dim colIndexArr As Variant
-    Dim key As Variant
+    Dim r1 As Long, r2 As Long
+    Dim c1 As Long, c2 As Long
 
     If Not IsArray(C_Arr) Then
         Err.Raise vbObjectError + 2080, , "Array not initialized."
     End If
 
-    If Not TypeName(valueMap) = "Dictionary" Then
+    r1 = LBound(C_Arr, 1): r2 = UBound(C_Arr, 1)
+    c1 = LBound(C_Arr, 2): c2 = UBound(C_Arr, 2)
+
+    If keyCol > c2 Or keyCol < c1 Then
+        Err.Raise vbObjectError + 2081, , "Key column index out of bounds: " & keyCol
+    End If
+
+    If IsArray(ItemCol) Then
+        For j = LBound(ItemCol) To UBound(ItemCol)
+            If ItemCol(j) > c2 Or ItemCol(j) < c1 Then
+                Err.Raise vbObjectError + 2082, , "Item column index out of bounds: " & ItemCol(j)
+            End If
+        Next j
+    Else
+        If ItemCol > c2 Or ItemCol < c1 Then
+            Err.Raise vbObjectError + 2082, , "Item column index out of bounds: " & ItemCol
+        End If
+    End If
+
+    Set retDict = VBA.CreateObject("Scripting.Dictionary")
+
+    For i = r1 To r2
+        If Not retDict.Exists(C_Arr(i, keyCol)) Then
+            If IsArray(ItemCol) Then
+                ReDim itemArr(LBound(ItemCol) To UBound(ItemCol))
+                For j = LBound(ItemCol) To UBound(ItemCol)
+                    itemArr(j) = C_Arr(i, ItemCol(j))
+                Next j
+                retDict.Add C_Arr(i, keyCol), itemArr
+            Else
+                retDict.Add C_Arr(i, keyCol), C_Arr(i, ItemCol)
+            End If
+        End If
+    Next i
+
+    Set CreateMap = retDict
+    
+End Function
+
+Public Sub Map(ByVal ColIndex As Variant, ByVal valueMap As Object, Optional ByVal DefaultValue As Variant = Empty)
+    Dim i As Long, j As Long
+    Dim colIndexArr As Variant, MapArr() As Variant
+    Dim key As Variant
+    Dim Col As Long
+    Dim mappedValue As Variant
+
+    ' Validate source array
+    If Not IsArray(C_Arr) Then
+        Err.Raise vbObjectError + 2080, , "Array not initialized."
+    End If
+
+    ' Validate valueMap
+    If TypeName(valueMap) <> "Dictionary" Then
         Err.Raise vbObjectError + 2083, , "valueMap must be a Scripting.Dictionary object."
     End If
 
+    ' Normalize column index to array
     colIndexArr = NormalizeToArray(ColIndex)
 
+    ' Ensure colIndexArr is 1D
     If DimensionOfArray(colIndexArr) > 1 Then
         Err.Raise vbObjectError + 2081, , "colIndex must be a 1D array or a Long/Integer variable."
     End If
 
-    totalRows = UBound(C_Arr, 1)
-    totalCols = UBound(C_Arr, 2)
-
+    ' Validate column indices
     For j = LBound(colIndexArr) To UBound(colIndexArr)
-        Dim col As Long: col = colIndexArr(j)
-        If col < 1 Or col > totalCols Then
-            Err.Raise vbObjectError + 2082, , "Column index out of bounds: " & col
+        Col = colIndexArr(j)
+        If Col < LBound(C_Arr, 2) Or Col > UBound(C_Arr, 2) Then
+            Err.Raise vbObjectError + 2082, , "Column index out of bounds: " & Col
         End If
-
-        For i = 1 To totalRows
-            key = CStr(C_Arr(i, col))
-            If valueMap.Exists(key) Then
-                C_Arr(i, col) = valueMap(key)
-            End If
-        Next i
     Next j
-
-    If C_Ref <> "" Then C_Dict(C_Ref) = C_Arr
     
+    MapArr = C_Arr
+    ' Apply mapping in-place
+    For i = LBound(MapArr, 1) To UBound(MapArr, 1)
+        For j = LBound(colIndexArr) To UBound(colIndexArr)
+            Col = colIndexArr(j)
+            key = MapArr(i, Col)
+            If valueMap.Exists(key) Then
+                mappedValue = valueMap(key)
+                If IsArray(mappedValue) Then
+                    Err.Raise vbObjectError + 2084, , "Mapped value for key '" & key & "' is an array. Arrays are not supported."
+                End If
+                MapArr(i, Col) = mappedValue
+            Else
+                MapArr(i, Col) = DefaultValue
+            End If
+        Next j
+    Next i
+
+    ' Update reference dictionary if applicable
+    C_Arr = MapArr
+    If C_Ref <> "" Then C_Dict(C_Ref) = C_Arr
 End Sub
 
-Public Function GroupBy(ByVal ColIndexes As Variant, _
+Public Function LookUpRows(ByVal RowIndex As Variant, ByVal valueMap As Object, Optional ByVal DefaultValue As Variant = Empty) As Arrays
+    Dim i As Long, j As Long, n As Long
+    Dim totalCols As Long, retRows As Long
+    Dim rowIndexArr As Variant, retArr As Variant
+    Dim key As Variant
+    Dim row As Long
+    Dim arrObj As New Arrays
+    Dim dict As Object
+    
+    ' Validate source array
+    If Not IsArray(C_Arr) Then
+        Err.Raise vbObjectError + 2080, , "Array not initialized."
+    End If
+
+    ' Validate valueMap
+    If TypeName(valueMap) <> "Dictionary" Then
+        Err.Raise vbObjectError + 2083, , "valueMap must be a Scripting.Dictionary object."
+    End If
+
+    ' Normalize row index to array
+    rowIndexArr = NormalizeToArray(RowIndex)
+
+    ' Ensure rowIndexArr is 1D
+    If DimensionOfArray(rowIndexArr) > 1 Then
+        Err.Raise vbObjectError + 2081, , "RowIndex must be a 1D array or a Long/Integer variable."
+    End If
+
+    ' Get array dimensions
+    totalCols = UBound(C_Arr, 2) - LBound(C_Arr, 2) + 1
+    retRows = UBound(rowIndexArr) - LBound(rowIndexArr) + 1
+
+    ' Validate row indices
+    For i = LBound(rowIndexArr) To UBound(rowIndexArr)
+        row = rowIndexArr(i)
+        If row < LBound(C_Arr, 1) Or row > UBound(C_Arr, 1) Then
+            Err.Raise vbObjectError + 2082, , "Row index out of bounds: " & row
+        End If
+    Next i
+
+    ' Initialize return array with only mapped rows
+    ReDim retArr(1 To retRows, 1 To totalCols)
+
+    ' Apply mapping
+    n = 1
+    For i = LBound(rowIndexArr) To UBound(rowIndexArr)
+        row = rowIndexArr(i)
+        For j = 1 To totalCols
+            key = C_Arr(row, j)
+            If valueMap.Exists(key) Then
+                If IsArray(valueMap(key)) Then
+                    retArr(n, j) = "|" & Join(valueMap(key), "|, ") & "|"
+                Else
+                    retArr(n, j) = valueMap(key)
+                End If
+            Else
+                retArr(n, j) = DefaultValue
+            End If
+        Next j
+        n = n + 1
+    Next i
+    
+    Set dict = CreateObject("Scripting.Dictionary")
+    dict.Add C_Ref, retArr
+    
+    Set arrObj.Arrays = dict
+    arrObj.UseRef C_Ref
+    Set LookUpRows = arrObj
+    
+End Function
+
+Public Function LookUpCols(ByVal ColIndex As Variant, ByVal valueMap As Object, Optional ByVal DefaultValue As Variant = Empty) As Arrays
+    
+    Dim i As Long, j As Long, n As Long
+    Dim totalRows As Long, retCols As Long
+    Dim colIndexArr As Variant, retArr As Variant
+    Dim key As Variant
+    Dim Col As Long
+    Dim arrObj As New Arrays
+    Dim dict As Object
+    
+    ' Validate source array
+    If Not IsArray(C_Arr) Then
+        Err.Raise vbObjectError + 2080, , "Array not initialized."
+    End If
+
+    ' Validate valueMap
+    If TypeName(valueMap) <> "Dictionary" Then
+        Err.Raise vbObjectError + 2083, , "valueMap must be a Scripting.Dictionary object."
+    End If
+
+    ' Normalize column index to array
+    colIndexArr = NormalizeToArray(ColIndex)
+
+    ' Ensure colIndexArr is 1D
+    If DimensionOfArray(colIndexArr) > 1 Then
+        Err.Raise vbObjectError + 2081, , "colIndex must be a 1D array or a Long/Integer variable."
+    End If
+
+    ' Get array dimensions
+    totalRows = UBound(C_Arr, 1) - LBound(C_Arr, 1) + 1
+    retCols = UBound(colIndexArr) - LBound(colIndexArr) + 1
+
+    ' Validate column indices
+    For j = LBound(colIndexArr) To UBound(colIndexArr)
+        Col = colIndexArr(j)
+        If Col < LBound(C_Arr, 2) Or Col > UBound(C_Arr, 2) Then
+            Err.Raise vbObjectError + 2082, , "Column index out of bounds: " & Col
+        End If
+    Next j
+
+    ' Initialize return array with only mapped columns
+    ReDim retArr(1 To totalRows, 1 To retCols)
+
+    ' Apply mapping
+    For i = 1 To totalRows
+        n = 1
+        For j = LBound(colIndexArr) To UBound(colIndexArr)
+            Col = colIndexArr(j)
+            key = C_Arr(i, Col)
+            If valueMap.Exists(key) Then
+                If IsArray(valueMap(key)) Then
+                    retArr(i, n) = "|" & Join(valueMap(key), "|, ") & "|"
+                Else
+                    retArr(i, n) = valueMap(key)
+                End If
+            Else
+                retArr(i, n) = DefaultValue
+            End If
+            n = n + 1
+        Next j
+    Next i
+    
+    Set dict = CreateObject("Scripting.Dictionary")
+    dict.Add C_Ref, retArr
+    
+    Set arrObj.Arrays = dict
+    arrObj.UseRef C_Ref
+    Set LookUpCols = arrObj
+    
+End Function
+
+Public Function GroupBy(ByVal colIndexes As Variant, _
                         ByVal aggFunc As String, _
                         ByVal targetCol As Long, _
-                        Optional MatchMode As Variant = vbTextEquals, _
+                        Optional matchmode As Variant = vbTextEquals, _
                         Optional CompareMethod As VbCompareMethod = vbBinaryCompare) As Arrays
     Dim i As Long, j As Long
     Dim totalRows As Long
@@ -3083,8 +3967,8 @@ Public Function GroupBy(ByVal ColIndexes As Variant, _
     If Not IsArray(C_Arr) Then Err.Raise vbObjectError + 2091, , "Array not initialized."
     If targetCol < LBound(C_Arr, 2) Or targetCol > UBound(C_Arr, 2) Then Err.Raise vbObjectError + 2093, , "Target column out of bounds."
 
-    colIndexArr = NormalizeToArray(ColIndexes)
-    MatchModeArr = NormalizeMatchMode(colIndexArr, MatchMode)
+    colIndexArr = NormalizeToArray(colIndexes)
+    MatchModeArr = NormalizeMatchMode(colIndexArr, matchmode)
 
     totalRows = UBound(C_Arr, 1)
     Set keyDict = CreateObject("Scripting.Dictionary")
@@ -3095,7 +3979,7 @@ Public Function GroupBy(ByVal ColIndexes As Variant, _
         For j = LBound(colIndexArr) To UBound(colIndexArr)
             key = key & "|" & CStr(C_Arr(i, colIndexArr(j)))
         Next j
-        key = Mid(key, 2) ' remove leading "|"
+        key = mid(key, 2) ' remove leading "|"
         If Not keyDict.Exists(key) Then keyDict.Add key, True
     Next i
 
@@ -3127,18 +4011,18 @@ Public Function GroupBy(ByVal ColIndexes As Variant, _
     Set GroupBy = arrObj
 End Function
 
-Private Function AggregateIfs(aggFunc As String, ColIndexes As Variant, criteria As Variant, targetCol As Long, matchModes As Variant, CompareMethod As VbCompareMethod) As Variant
+Private Function AggregateIfs(aggFunc As String, colIndexes As Variant, criteria As Variant, targetCol As Long, matchModes As Variant, CompareMethod As VbCompareMethod) As Variant
     Select Case LCase(aggFunc)
-        Case "sum": AggregateIfs = SumIfs(ColIndexes, criteria, targetCol, matchModes, CompareMethod)
-        Case "count": AggregateIfs = CountIfs(ColIndexes, criteria, matchModes, CompareMethod)
-        Case "max": AggregateIfs = MaxIfs(ColIndexes, criteria, targetCol, matchModes, CompareMethod)
-        Case "min": AggregateIfs = MinIfs(ColIndexes, criteria, targetCol, matchModes, CompareMethod)
-        Case "average": AggregateIfs = AverageIfs(ColIndexes, criteria, targetCol, matchModes, CompareMethod)
+        Case "sum": AggregateIfs = SumIfs(colIndexes, criteria, targetCol, matchModes, CompareMethod)
+        Case "count": AggregateIfs = CountIfs(colIndexes, criteria, matchModes, CompareMethod)
+        Case "max": AggregateIfs = MaxIfs(colIndexes, criteria, targetCol, matchModes, CompareMethod)
+        Case "min": AggregateIfs = MinIfs(colIndexes, criteria, targetCol, matchModes, CompareMethod)
+        Case "average": AggregateIfs = AverageIfs(colIndexes, criteria, targetCol, matchModes, CompareMethod)
         Case Else: Err.Raise vbObjectError + 2092, , "Unsupported aggregation function: " & aggFunc
     End Select
 End Function
 
-Public Function Pivot(rowFieldIndex As Long, columnFieldIndex As Long, dataFieldIndex As Long, Optional aggFunc As String = "Sum") As Variant
+Public Function pivot(rowFieldIndex As Long, columnFieldIndex As Long, dataFieldIndex As Long, Optional aggFunc As String = "Sum") As Variant
     Dim grouped As Arrays
     Dim rowVals As Collection, colVals As Collection
     Dim result() As Variant
@@ -3170,40 +4054,34 @@ Public Function Pivot(rowFieldIndex As Long, columnFieldIndex As Long, dataField
         result(r, c) = tempArr(i, 3)
     Next i
 
-    Pivot = result
+    pivot = result
 End Function
 
-Public Function DistinctValues(Index As Long, Optional ByCol As Boolean = True) As Collection
+Public Function DistinctValues(Index As Long, Optional ByCol As Boolean = True) As Variant
     Dim dict As Object: Set dict = CreateObject("Scripting.Dictionary")
-    Dim i As Long, val As Variant
+    Dim i As Long, Val As Variant
     
     If ByCol Then
         ' Distinct values from a column
         For i = LBound(C_Arr, 1) To UBound(C_Arr, 1)
-            val = C_Arr(i, Index)
-            If Not dict.Exists(val) Then dict.Add val, Nothing
+            Val = C_Arr(i, Index)
+            If Not dict.Exists(Val) Then dict.Add Val, Nothing
         Next i
     Else
         ' Distinct values from a row
         For i = LBound(C_Arr, 2) To UBound(C_Arr, 2)
-            val = C_Arr(Index, i)
-            If Not dict.Exists(val) Then dict.Add val, Nothing
+            Val = C_Arr(Index, i)
+            If Not dict.Exists(Val) Then dict.Add Val, Nothing
         Next i
     End If
     
-    Dim result As New Collection
-    Dim key As Variant
-    For Each key In dict.keys
-        result.Add key
-    Next key
-    
-    Set DistinctValues = result
+    DistinctValues = dict.keys()
 End Function
 
-Private Function FindIndex(coll As Collection, val As Variant) As Long
+Private Function FindIndex(Coll As Collection, Val As Variant) As Long
     Dim i As Long
-    For i = 1 To coll.Count
-        If coll(i) = val Then
+    For i = 1 To Coll.Count
+        If Coll(i) = Val Then
             FindIndex = i
             Exit Function
         End If
@@ -3211,7 +4089,7 @@ Private Function FindIndex(coll As Collection, val As Variant) As Long
     FindIndex = 0 ' Not found
 End Function
 
-Public Function SplitCells(ByVal delimiter As String, Optional ByVal TransposeResult As Boolean = False) As Arrays
+Public Function SplitCells(ByVal delimiter As String, Optional ByVal TransFieldeResult As Boolean = False) As Arrays
     Dim i As Long, j As Long
     Dim parts() As String, maxParts As Long
     Dim tempArr() As Variant, finalArr() As Variant
@@ -3258,8 +4136,8 @@ Public Function SplitCells(ByVal delimiter As String, Optional ByVal TransposeRe
         Next i
     End If
 
-    ' Optional transpose
-    If TransposeResult Then
+    ' Optional transFielde
+    If TransFieldeResult Then
         ReDim finalArr(LBound(tempArr, 2) To UBound(tempArr, 2), LBound(tempArr, 1) To UBound(tempArr, 1))
         For i = LBound(tempArr, 1) To UBound(tempArr, 1)
             For j = LBound(tempArr, 2) To UBound(tempArr, 2)
@@ -3281,7 +4159,7 @@ End Function
 Public Function SplitColumns(ColIndex As Long, delimiter As String) As Variant
     Dim maxParts As Long, i As Long, parts() As String
     Dim tempArray() As Variant
-    Dim RowCount As Long, ColCount As Long
+    Dim RowCount As Long, colCount As Long
     
     If Not IsArray(C_Arr) Then Err.Raise vbObjectError + 2091, , "Array not initialized."
     
@@ -3293,13 +4171,13 @@ Public Function SplitColumns(ColIndex As Long, delimiter As String) As Variant
         If UBound(parts) + 1 > maxParts Then maxParts = UBound(parts) + 1
     Next i
     
-    ColCount = UBound(C_Arr, 2)
-    ReDim tempArray(1 To RowCount, 0 To ColCount - 1 + maxParts)
+    colCount = UBound(C_Arr, 2)
+    ReDim tempArray(1 To RowCount, 0 To colCount - 1 + maxParts)
     
     ' Copy original data and split column
     For i = 1 To RowCount
         Dim j As Long
-        For j = 0 To ColCount - 1
+        For j = 0 To colCount - 1
             If j <> ColIndex Then
                 tempArray(i, j) = C_Arr(i, j)
             End If
@@ -3307,7 +4185,7 @@ Public Function SplitColumns(ColIndex As Long, delimiter As String) As Variant
         
         parts = Split(C_Arr(i, ColIndex), delimiter)
         For j = 0 To UBound(parts)
-            tempArray(i, ColCount - 1 + j) = parts(j)
+            tempArray(i, colCount - 1 + j) = parts(j)
         Next j
     Next i
     
@@ -3353,35 +4231,35 @@ Public Sub ToRange(ByVal targetRange As Range)
     End With
 End Sub
 
-Public Sub ToCSV(ByVal filePath As String, Optional ByVal delimiter As String = ",")
+Public Sub ToCSV(ByVal FilePath As String, Optional ByVal delimiter As String = ",")
     Dim fNum As Integer
     Dim i As Long, j As Long
     Dim line As String
-    Dim Arr As Variant
+    Dim arr As Variant
 
     If Not C_Dict.Exists(C_Ref) Then
         Err.Raise vbObjectError + 2115, , "Reference key not found in C_Dict."
     End If
 
-    Arr = C_Dict(C_Ref)
+    arr = C_Dict(C_Ref)
     fNum = FreeFile
 
-    Open filePath For Output As #fNum
-    For i = LBound(Arr, 1) To UBound(Arr, 1)
+    Open FilePath For Output As #fNum
+    For i = LBound(arr, 1) To UBound(arr, 1)
         line = ""
-        For j = LBound(Arr, 2) To UBound(Arr, 2)
-            line = line & """" & Replace(CStr(Arr(i, j)), """", """""") & """" & delimiter
+        For j = LBound(arr, 2) To UBound(arr, 2)
+            line = line & """" & Replace(CStr(arr(i, j)), """", """""") & """" & delimiter
         Next j
-        line = Left(line, Len(line) - Len(delimiter)) ' Remove trailing delimiter
+        line = left(line, Len(line) - Len(delimiter)) ' Remove trailing delimiter
         Print #fNum, line
     Next i
     Close #fNum
 End Sub
 
-Public Sub ToWorkbook(ByVal filePath As String, Optional ByVal sheetName As String = "ExportedData")
+Public Sub ToWorkbook(ByVal FilePath As String, Optional ByVal sheetName As String = "ExportedData")
     Dim wb As Workbook
     Dim ws As Worksheet
-    Dim Arr As Variant
+    Dim arr As Variant
     Dim fso As Object
     Dim fileExists As Boolean
 
@@ -3389,12 +4267,12 @@ Public Sub ToWorkbook(ByVal filePath As String, Optional ByVal sheetName As Stri
         Err.Raise vbObjectError + 2096, , "Array not found in C_Dict."
     End If
 
-    Arr = C_Dict(C_Ref)
+    arr = C_Dict(C_Ref)
     Set fso = CreateObject("Scripting.FileSystemObject")
-    fileExists = fso.fileExists(filePath)
+    fileExists = fso.fileExists(FilePath)
 
     If fileExists Then
-        Set wb = Workbooks.Open(filePath)
+        Set wb = Workbooks.Open(FilePath)
     Else
         Set wb = Workbooks.Add
     End If
@@ -3402,13 +4280,13 @@ Public Sub ToWorkbook(ByVal filePath As String, Optional ByVal sheetName As Stri
     Set ws = wb.Sheets.Add(After:=wb.Sheets(wb.Sheets.Count))
     ws.Name = sheetName
 
-    With ws.Range("A1").Resize(UBound(Arr, 1), UBound(Arr, 2))
-        .Value = Arr
+    With ws.Range("A1").Resize(UBound(arr, 1), UBound(arr, 2))
+        .Value = arr
     End With
 
     If Not fileExists Then
         Application.DisplayAlerts = False
-        wb.SaveAs filePath
+        wb.SaveAs FilePath
         Application.DisplayAlerts = True
     Else
         wb.Save
@@ -3416,4 +4294,3 @@ Public Sub ToWorkbook(ByVal filePath As String, Optional ByVal sheetName As Stri
 
     wb.Close SaveChanges:=False
 End Sub
-

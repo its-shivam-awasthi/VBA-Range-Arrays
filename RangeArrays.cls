@@ -168,12 +168,12 @@ Private Function Exclude_Header(Arg As Range, _
                                 Optional HeaderOrientation As vbHeaderOrientation = vbRowHeader, _
                                 Optional TrimEmptyRows As Boolean = False) As Range
     Dim r As Long, c As Long
-    Dim RowCount As Long, ColCount As Long
+    Dim RowCount As Long, colCount As Long
     Dim ws As Worksheet
     Set ws = Arg.Worksheet
 
     RowCount = Arg.Rows.Count
-    ColCount = Arg.Columns.Count
+    colCount = Arg.Columns.Count
 
     ' Trim trailing empty rows if requested
     If TrimEmptyRows Then
@@ -192,14 +192,14 @@ Private Function Exclude_Header(Arg As Range, _
     End If
 
     If HeaderOrientation = vbColumnHeader Or HeaderOrientation = vbBoth Then
-        If ColCount <= 1 Then Err.Raise vbObjectError + 1013, , "Cannot exclude column header from a single-column range."
+        If colCount <= 1 Then Err.Raise vbObjectError + 1013, , "Cannot exclude column header from a single-column range."
         c = Arg.Column + 1
-        ColCount = ColCount - 1
+        colCount = colCount - 1
     Else
         c = Arg.Column
     End If
 
-    Set Exclude_Header = ws.Range(ws.Cells(r, c), ws.Cells(r + RowCount - 1, c + ColCount - 1))
+    Set Exclude_Header = ws.Range(ws.Cells(r, c), ws.Cells(r + RowCount - 1, c + colCount - 1))
 End Function
 
 ' Property Get to retrieve array by reference name
@@ -350,18 +350,18 @@ If Not C_Dict.Exists(ReferenceName) Then
     Err.Raise vbObjectError + 1014, , "Reference not found: " & ReferenceName
 End If
 
-Dim Arr As Variant
-Arr = C_Dict(ReferenceName)
+Dim arr As Variant
+arr = C_Dict(ReferenceName)
 
-If Not IsArray(Arr) Then
+If Not IsArray(arr) Then
     Err.Raise vbObjectError + 1015, , "Referenced item is not an array."
 End If
 
 If ClearBeforeWrite Then
-    targetRange.Resize(UBound(Arr, 1), UBound(Arr, 2)).ClearContents
+    targetRange.Resize(UBound(arr, 1), UBound(arr, 2)).ClearContents
 End If
 
-targetRange.Resize(UBound(Arr, 1), UBound(Arr, 2)).Value = Arr
+targetRange.Resize(UBound(arr, 1), UBound(arr, 2)).Value = arr
 
 End Sub
 
