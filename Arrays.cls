@@ -26,9 +26,9 @@ Public Enum vbMatchMode
     vbNumberNotEqual = 12
     vbNumberGreaterThan = 13
     vbNumberGreaterThanOrEqual = 14
-    vbNumberLessThan = 2048
-    vbNumberLessThanOrEqual = 15
-    vbNumberBetween = 16
+    vbNumberLessThan = 15
+    vbNumberLessThanOrEqual = 16
+    vbNumberBetween = 17
     'Logic
     VbVarType = 21
     vbIsFunction = 22
@@ -4294,3 +4294,4 @@ Public Sub ToWorkbook(ByVal FilePath As String, Optional ByVal sheetName As Stri
 
     wb.Close SaveChanges:=False
 End Sub
+
