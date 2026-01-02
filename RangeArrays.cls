@@ -18,6 +18,7 @@ Private arrObj As Arrays
 Public Enum vbExtendToRange
     vbAbsolute
     vbCurrentregion
+    vbEndxlDownToxlRight
     vbUsedRegion
     vbLastRowLastColumn
 End Enum
@@ -128,9 +129,34 @@ Select Case extendedRange
         
     Case vbCurrentregion
         Set extended_Range = c_range.CurrentRegion
+        
+    Case vbEndxlDownToxlRight
+        Set extended_Range = c_range.End(xlDown).End(xlToRight)
     
     Case vbUsedRegion
-        Set extended_Range = c_ws.UsedRange
+        Dim UsedRng As Range
+        Set UsedRng = c_ws.UsedRange
+        
+        Dim ur As Long, uc As Long
+        With UsedRng
+            ur = .row + .Rows.Count - 1
+            uc = .Column + .Columns.Count - 1
+        End With
+        
+        Dim cr As Long, cc As Long
+        With c_range
+            cr = .row + .Rows.Count - 1
+            cc = .Column + .Columns.Count - 1
+        End With
+        
+        If ur < c_range.row Or uc < c_range.Column Then
+            Err.Raise vbObjectError + 1009, , "Cannot extend range, range outside extended parameters."
+        End If
+        
+        Dim newRow As Long: newRow = IIf(ur > cr, ur, cr) - c_range.row + 1
+        Dim newCol As Long: newCol = IIf(uc > cc, uc, cc) - c_range.Column + 1
+        
+        Set extended_Range = c_range.Resize(newRow, newCol)
         
     Case vbLastRowLastColumn
         
@@ -142,7 +168,7 @@ Select Case extendedRange
         On Error GoTo 0
 
         If lr < c_range.row Or lc < c_range.Column Then
-            Err.Raise vbObjectError + 1009, , "Cannot extend range to last row and column."
+            Err.Raise vbObjectError + 1009, , "Cannot extend range, range outside extended parameters."
         End If
 
         Set extended_Range = c_ws.Range(c_ws.Cells(c_range.row, c_range.Column), c_ws.Cells(lr, lc))

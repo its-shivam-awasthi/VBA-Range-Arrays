@@ -12,14 +12,14 @@ Option Explicit
 Private C_Arr() As Variant
 Private C_rowIndex() As Variant
 Private C_colIndex() As Variant
-Public HasRowIndex As Boolean, HasColIndex As Boolean
+Private HasRowIndex As Boolean, HasColIndex As Boolean
 Private HasRun As Boolean
 Private DimArr As Long
 Private pParent As Arrays
 
 Private Sub Class_Initialize()
-HasRowIndex = False: HasColIndex = False
-HasRun = False
+    HasRowIndex = False: HasColIndex = False
+    HasRun = False
 End Sub
 
 Public Property Let ParentArrays(ByRef parentObj As Arrays)
@@ -56,11 +56,11 @@ Public Property Get HasInitialArray() As Variant
 End Property
 
 Public Property Get HasRowIndexes() As Boolean
-    HasRowIndexes = IsArray(C_rowIndex) And Not IsEmpty(C_rowIndex)
+    HasRowIndexes = HasRowIndex
 End Property
 
 Public Property Get HasColumnIndexes() As Boolean
-    HasColumnIndexes = IsArray(C_colIndex) And Not IsEmpty(C_colIndex)
+    HasColumnIndexes = HasColIndex
 End Property
 
 Public Property Get Dimension() As Long
@@ -161,14 +161,14 @@ End Property
 Public Property Get Value()
 
     Dim fi As Long, fj As Long, m As Long, n As Long
-    Dim RowIndexes() As Long, colIndexes() As Long
+    Dim RowIndexes() As Long, ColIndexes() As Long
     Dim retArr As Variant
 
     Select Case Me.Dimension
         Case 0
             retArr = Array()
         Case 1
-            If Me.HasColIndex Then Err.Raise vbObjectError + 3001, , "1-D array can't have column indexes."
+            If Me.HasColumnIndexes Then Err.Raise vbObjectError + 3001, , "1-D array can't have column indexes."
                         
             RowIndexes = Me.RowIndexes
             ReDim retArr(1 To Me.RowIndexCount)
@@ -178,14 +178,14 @@ Public Property Get Value()
             Next fi
         Case Else
             RowIndexes = Me.RowIndexes
-            colIndexes = Me.ColumnIndexes
+            ColIndexes = Me.ColumnIndexes
             ReDim retArr(1 To Me.RowIndexCount, 1 To Me.ColIndexCount)
             For fi = LBound(RowIndexes) To UBound(RowIndexes)
                 m = m + 1
                 n = 0
-                For fj = LBound(colIndexes) To UBound(colIndexes)
+                For fj = LBound(ColIndexes) To UBound(ColIndexes)
                     n = n + 1
-                    retArr(m, n) = C_Arr(RowIndexes(fi), colIndexes(fj))
+                    retArr(m, n) = C_Arr(RowIndexes(fi), ColIndexes(fj))
                 Next fj
             Next fi
     End Select
@@ -197,7 +197,7 @@ End Property
 Public Property Let Value(NewValue As Variant)
     Dim ValArray() As Variant
     Dim fi As Long, fj As Long, n As Long
-    Dim RowIndexes() As Long, colIndexes() As Long
+    Dim RowIndexes() As Long, ColIndexes() As Long
 
     If IsArray(NewValue) Then
         ValArray = FlattenArray(NewValue)
@@ -214,7 +214,7 @@ Public Property Let Value(NewValue As Variant)
             Me.InitialArray = ValArray
 
         Case 1
-            If Me.HasColIndex Then Err.Raise vbObjectError + 3001, , "1-D array can't have column indexes."
+            If Me.HasColumnIndexes Then Err.Raise vbObjectError + 3001, , "1-D array can't have column indexes."
             n = LBound(ValArray)
             RowIndexes = Me.RowIndexes
             For fi = LBound(RowIndexes) To UBound(RowIndexes)
@@ -224,12 +224,12 @@ Public Property Let Value(NewValue As Variant)
 
         Case Else
             RowIndexes = Me.RowIndexes
-            colIndexes = Me.ColumnIndexes
+            ColIndexes = Me.ColumnIndexes
             
             n = LBound(ValArray)
             For fi = LBound(RowIndexes) To UBound(RowIndexes)
-                For fj = LBound(colIndexes) To UBound(colIndexes)
-                    C_Arr(RowIndexes(fi), colIndexes(fj)) = ValArray(n)
+                For fj = LBound(ColIndexes) To UBound(ColIndexes)
+                    C_Arr(RowIndexes(fi), ColIndexes(fj)) = ValArray(n)
                     n = n + 1
                 Next fj
             Next fi
@@ -239,34 +239,34 @@ Public Property Let Value(NewValue As Variant)
     
 End Property
 
-Public Property Get cell(Index As Long) As Variant
-    Dim RowIndexes() As Long, colIndexes() As Long
+Public Property Get Cell(Index As Long) As Variant
+    Dim RowIndexes() As Long, ColIndexes() As Long
     Dim quotient As Long, remainder As Long
 
     Select Case Me.Dimension
         Case 0
             ' Return an empty array for scalar/uninitialized case
-            cell = Array()
+            Cell = Array()
 
         Case 1
-            If Me.HasColIndex Then Err.Raise vbObjectError + 3001, , "1-D array can't have column indexes."
+            If Me.HasColumnIndexes Then Err.Raise vbObjectError + 3001, , "1-D array can't have column indexes."
             RowIndexes = Me.RowIndexes
             If Index < 0 Or Index > UBound(RowIndexes) Then Err.Raise vbObjectError + 3002, , "Index out of bounds."
-            cell = C_Arr(RowIndexes(Index))
+            Cell = C_Arr(RowIndexes(Index))
 
         Case Else
             RowIndexes = Me.RowIndexes
-            colIndexes = Me.ColumnIndexes
+            ColIndexes = Me.ColumnIndexes
             If Index < 0 Or Index >= Me.RowIndexCount * Me.ColIndexCount Then Err.Raise vbObjectError + 3003, , "Index out of bounds."
 
             quotient = Index \ Me.ColIndexCount
             remainder = Index Mod Me.ColIndexCount
-            cell = C_Arr(RowIndexes(quotient), colIndexes(remainder))
+            Cell = C_Arr(RowIndexes(quotient), ColIndexes(remainder))
     End Select
 End Property
 
-Public Property Let cell(Index As Long, NewValue As Variant)
-    Dim RowIndexes() As Long, colIndexes() As Long
+Public Property Let Cell(Index As Long, NewValue As Variant)
+    Dim RowIndexes() As Long, ColIndexes() As Long
     Dim quotient As Long, remainder As Long
 
     Select Case Me.Dimension
@@ -275,24 +275,44 @@ Public Property Let cell(Index As Long, NewValue As Variant)
             C_Arr(Index) = NewValue
 
         Case 1
-            If Me.HasColIndex Then Err.Raise vbObjectError + 3001, , "1-D array can't have column indexes."
+            If Me.HasColumnIndexes Then Err.Raise vbObjectError + 3001, , "1-D array can't have column indexes."
             RowIndexes = Me.RowIndexes
             If Index < 0 Or Index > UBound(RowIndexes) Then Err.Raise vbObjectError + 3002, , "Index out of bounds."
             C_Arr(RowIndexes(Index)) = NewValue
 
         Case Else
             RowIndexes = Me.RowIndexes
-            colIndexes = Me.ColumnIndexes
+            ColIndexes = Me.ColumnIndexes
             If Index < 0 Or Index >= Me.RowIndexCount * Me.ColIndexCount Then Err.Raise vbObjectError + 3003, , "Index out of bounds."
-
+            
             quotient = Index \ Me.ColIndexCount
             remainder = Index Mod Me.ColIndexCount
-            C_Arr(RowIndexes(quotient), colIndexes(remainder)) = NewValue
+            C_Arr(RowIndexes(quotient), ColIndexes(remainder)) = NewValue
     End Select
     
     Call ApplyChangesToParent
     
 End Property
+
+Public Function CellRef(RowIndex As Long, Optional ColIndex As Long) As Long
+    Dim n As Long
+    
+    Select Case Me.Dimension
+        Case 0
+            n = 0
+        Case 1
+            If IsEmpty(ColIndex) Then Err.Raise vbObjectError + 3001, , "1-D array can't have column indexes."
+            If RowIndex < 0 Or RowIndex >= Me.RowIndexCount Then Err.Raise vbObjectError + 3004, , "RowIndex out of bounds."
+            n = RowIndex
+        Case Else
+            If RowIndex < 0 Or RowIndex >= Me.RowIndexCount Then Err.Raise vbObjectError + 3004, , "RowIndex out of bounds."
+            If ColIndex < 0 Or ColIndex >= Me.ColIndexCount Then Err.Raise vbObjectError + 3005, , "ColIndex out of bounds."
+            n = RowIndex * Me.ColIndexCount + ColIndex
+    End Select
+    
+    CellRef = n
+
+End Function
 
 Public Sub Reset()
 
@@ -315,13 +335,13 @@ End Sub
 Public Sub Clear()
     Dim fi As Long, fj As Long
     Dim RowIndexes() As Long
-    Dim colIndexes() As Long
+    Dim ColIndexes() As Long
 
     Select Case Me.Dimension
         Case 0
             Exit Sub
         Case 1
-            If Me.HasColIndex Then Err.Raise vbObjectError + 3001, , "1-D array can't have column indexes."
+            If Me.HasColumnIndexes Then Err.Raise vbObjectError + 3001, , "1-D array can't have column indexes."
 
             RowIndexes = Me.RowIndexes
             For fi = LBound(RowIndexes) To UBound(RowIndexes)
@@ -330,11 +350,11 @@ Public Sub Clear()
 
         Case Else
             RowIndexes = Me.RowIndexes
-            colIndexes = Me.ColumnIndexes
+            ColIndexes = Me.ColumnIndexes
 
             For fi = LBound(RowIndexes) To UBound(RowIndexes)
-                For fj = LBound(colIndexes) To UBound(colIndexes)
-                    C_Arr(RowIndexes(fi), colIndexes(fj)) = Empty
+                For fj = LBound(ColIndexes) To UBound(ColIndexes)
+                    C_Arr(RowIndexes(fi), ColIndexes(fj)) = Empty
                 Next fj
             Next fi
     End Select
