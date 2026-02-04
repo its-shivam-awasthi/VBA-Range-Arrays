@@ -252,8 +252,14 @@ Public Property Let CellValue(ByVal RowIndex As Long, ByVal ColIndex As Long, By
 End Property
 
 Public Property Get HasInput() As Boolean
-
+    
+    On Error GoTo Failed_Result
     HasInput = (UBound(C_Arr, 1) > 1 Or Not IsEmpty(C_Arr(1, 1)))
+    On Error GoTo 0
+    Exit Function
+    
+Failed_Result:
+    HasInput = False
 
 End Property
 
@@ -1385,24 +1391,24 @@ Public Sub InsertMultipleCols(Indexes As Variant, ColData As Variant)
     ' Prepare result array
     ReDim resultArr(r1 To r2, c1 To c2 + insertCount)
 
-    Dim insertData As Variant, insertAt As Long, InsertCol As Variant, colOffset As Long
+    Dim insertData As Variant, insertAt As Long, InsertCol As Variant, ColOffset As Long
     For j = 0 To insertMap.Count - 1
 
         insertData = insertMap(j)
         insertAt = CLng(insertData(0))
         InsertCol = insertData(1)
-        colOffset = Get_Offset(insertAt, j + 1, IndexArr, insertMap)
+        ColOffset = Get_Offset(insertAt, j + 1, IndexArr, insertMap)
         For i = r1 To r2
             For k = LBound(InsertCol, 2) To UBound(InsertCol, 2)
-                resultArr(i, j + 1 + colOffset) = InsertCol(i, k)
+                resultArr(i, j + 1 + ColOffset) = InsertCol(i, k)
             Next k
         Next i
     Next j
 
     For j = c1 To c2
-        colOffset = Get_Offset(j, 0, IndexArr, insertMap)
+        ColOffset = Get_Offset(j, 0, IndexArr, insertMap)
         For i = r1 To r2
-            resultArr(i, j + colOffset) = C_Arr(i, j)
+            resultArr(i, j + ColOffset) = C_Arr(i, j)
         Next i
     Next j
 
@@ -1878,25 +1884,38 @@ Private Function NormalizeToArray(Index As Variant) As Variant
                 NormalizeToArray = Array(CLng(Index))
             ElseIf InStr(Index, ":") > 0 Or InStr(Index, ",") > 0 Then
                 VarComma = Split(Index, ",")
-                Erase returnArr ' Start with empty array
+                ReDim returnArr(0 To 0) ' Start with empty array
 
                 For Each Var In VarComma
-                    VarColon = Split(Var, ":")
-                    If UBound(VarColon) <> 1 Or Not (IsNumeric(VarColon(0)) And IsNumeric(VarColon(1))) Then
-                        Err.Raise vbObjectError + 1017, , "Reference Index not valid."
+                    If InStr(Var, ":") > 0 Then
+                        VarColon = Split(Var, ":")
+                        If UBound(VarColon) <> 1 Or Not (IsNumeric(VarColon(0)) And IsNumeric(VarColon(1))) Then
+                            Err.Raise vbObjectError + 1017, , "Reference Index not valid."
+                        End If
+    
+                        startVal = CLng(VarColon(0)): endVal = CLng(VarColon(1))
+                        If startVal > endVal Then Swap startVal, endVal
+    
+                        oldUBound = 0
+                        If UBound(returnArr) > 0 Then oldUBound = UBound(returnArr)
+                        NewLength = endVal - startVal + 1
+                        ReDim Preserve returnArr(0 To oldUBound + NewLength - 1)
+    
+                        For i = 0 To NewLength - 1
+                            returnArr(oldUBound + i) = startVal + i
+                        Next i
+                    Else
+                        If Not IsNumeric(Var) Then
+                            Err.Raise vbObjectError + 1017, , "Reference Index not valid."
+                        End If
+                        
+                        oldUBound = 0
+                        If UBound(returnArr) > 0 Then oldUBound = UBound(returnArr)
+                        
+                        ReDim Preserve returnArr(0 To oldUBound + 1)
+                        returnArr(oldUBound + 1) = CLng(Var)
+                    
                     End If
-
-                    startVal = CLng(VarColon(0)): endVal = CLng(VarColon(1))
-                    If startVal > endVal Then Swap startVal, endVal
-
-                    oldUBound = 0
-                    If Not IsArray(returnArr) Then oldUBound = UBound(returnArr)
-                    NewLength = endVal - startVal + 1
-                    ReDim Preserve returnArr(0 To oldUBound + NewLength - 1)
-
-                    For i = 0 To NewLength - 1
-                        returnArr(oldUBound + i) = startVal + i
-                    Next i
                 Next Var
 
                 NormalizeToArray = returnArr
@@ -2696,7 +2715,7 @@ Public Sub AddCalculatedColumn(Field As Long, _
     
     colIndexArr = NormalizeToArray(ColIndexes)
     
-    If DimensionOfArray(colIndexArr) > 1 Or LBound(colIndexArr) - UBound(colIndexArr) = 1 Then
+    If DimensionOfArray(colIndexArr) > 1 Or LBound(colIndexArr) - UBound(colIndexArr) < 1 Then
         Err.Raise vbObjectError + 2151, , "colIndex must be 1D arrays and must contain atleast 2 values."
     End If
     
@@ -2715,10 +2734,10 @@ Public Sub AddCalculatedColumn(Field As Long, _
 
         ' Calculate new column value
         Dim Value As Double
-        Value = Val(C_Arr(i, ColIndexes(LBound(ColIndexes))))
+        Value = val(C_Arr(i, ColIndexes(LBound(ColIndexes))))
 
         For j = LBound(ColIndexes) + 1 To UBound(ColIndexes)
-            Dim nextVal As Double: nextVal = Val(C_Arr(i, ColIndexes(j)))
+            Dim nextVal As Double: nextVal = val(C_Arr(i, ColIndexes(j)))
             Select Case operatorType
                 Case vbAdd:       Value = Value + nextVal
                 Case vbSubtract:  Value = Value - nextVal
@@ -3874,8 +3893,8 @@ Public Function CreateMap( _
         End If
     Else
         hasMultiItems = True
-        hasEmpyCells = String(UBound(itemIndexArr) - LBound(itemIndexArr), MapDelimiter)
         itemIndexArr = NormalizeToArray(ItemIndexes)
+        hasEmpyCells = String(UBound(itemIndexArr) - LBound(itemIndexArr), MapDelimiter)
         For i = LBound(itemIndexArr) To UBound(itemIndexArr)
             idx = CLng(itemIndexArr(i))
             If idx < minBound Or idx > maxBound Then
@@ -4451,29 +4470,29 @@ End Function
 
 Public Function DistinctValues(Index As Long, Optional ByCol As Boolean = True) As Variant
     Dim dict As Object: Set dict = CreateObject("Scripting.Dictionary")
-    Dim i As Long, Val As Variant
+    Dim i As Long, val As Variant
     
     If ByCol Then
         ' Distinct values from a column
         For i = LBound(C_Arr, 1) To UBound(C_Arr, 1)
-            Val = C_Arr(i, Index)
-            If Not dict.Exists(Val) Then dict.Add Val, Nothing
+            val = C_Arr(i, Index)
+            If Not dict.Exists(val) Then dict.Add val, Nothing
         Next i
     Else
         ' Distinct values from a row
         For i = LBound(C_Arr, 2) To UBound(C_Arr, 2)
-            Val = C_Arr(Index, i)
-            If Not dict.Exists(Val) Then dict.Add Val, Nothing
+            val = C_Arr(Index, i)
+            If Not dict.Exists(val) Then dict.Add val, Nothing
         Next i
     End If
     
     DistinctValues = dict.keys()
 End Function
 
-Private Function FindIndex(Coll As Collection, Val As Variant) As Long
+Private Function FindIndex(Coll As Collection, val As Variant) As Long
     Dim i As Long
     For i = 1 To Coll.Count
-        If Coll(i) = Val Then
+        If Coll(i) = val Then
             FindIndex = i
             Exit Function
         End If
@@ -4548,10 +4567,12 @@ Public Function SplitCells(ByVal Delimiter As String, Optional ByVal TransFielde
     Set SplitCells = arrObj
 End Function
 
-Public Function SplitColumns(ColIndex As Long, Delimiter As String) As Variant
+Public Function SplitColumns(ColIndex As Long, Delimiter As String) As Arrays
     Dim maxParts As Long, i As Long, parts() As String
     Dim tempArray() As Variant
     Dim RowCount As Long, colCount As Long
+    Dim arrObj As New Arrays
+    Dim dict As Object
     
     If Not IsArray(C_Arr) Then Err.Raise vbObjectError + 2091, , "Array not initialized."
     
@@ -4564,24 +4585,24 @@ Public Function SplitColumns(ColIndex As Long, Delimiter As String) As Variant
     Next i
     
     colCount = UBound(C_Arr, 2)
-    ReDim tempArray(1 To RowCount, 0 To colCount - 1 + maxParts)
+    ReDim tempArray(1 To RowCount, 1 To maxParts)
     
     ' Copy original data and split column
+    Dim j As Long
     For i = 1 To RowCount
-        Dim j As Long
-        For j = 0 To colCount - 1
-            If j <> ColIndex Then
-                tempArray(i, j) = C_Arr(i, j)
-            End If
-        Next j
-        
         parts = Split(C_Arr(i, ColIndex), Delimiter)
         For j = 0 To UBound(parts)
-            tempArray(i, colCount - 1 + j) = parts(j)
+            tempArray(i, j + 1) = parts(j)
         Next j
     Next i
     
-    SplitColumns = tempArray
+    Set dict = CreateObject("Scripting.Dictionary")
+    dict.Add C_Ref, tempArray
+
+    Set arrObj.Arrays = dict
+    arrObj.UseRef C_Ref
+    Set SplitColumns = arrObj
+    
 End Function
 
 Public Function ToString() As String

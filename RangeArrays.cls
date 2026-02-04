@@ -209,7 +209,7 @@ Private Function Exclude_Header(Arg As Range, _
     End If
 
     ' Validate header exclusion
-    If HeaderOrientation = vbRowHeader Or HeaderOrientation = vbBoth Then
+    If HeaderOrientation = vbColumnHeader Or HeaderOrientation = vbBoth Then
         If RowCount <= 1 Then Err.Raise vbObjectError + 1012, , "Cannot exclude row header from a single-row range."
         r = Arg.row + 1
         RowCount = RowCount - 1
@@ -217,7 +217,7 @@ Private Function Exclude_Header(Arg As Range, _
         r = Arg.row
     End If
 
-    If HeaderOrientation = vbColumnHeader Or HeaderOrientation = vbBoth Then
+    If HeaderOrientation = vbRowHeader Or HeaderOrientation = vbBoth Then
         If colCount <= 1 Then Err.Raise vbObjectError + 1013, , "Cannot exclude column header from a single-column range."
         c = Arg.Column + 1
         colCount = colCount - 1

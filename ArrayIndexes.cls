@@ -22,7 +22,7 @@ Private Sub Class_Initialize()
     HasRun = False
 End Sub
 
-Public Property Let ParentArrays(ByRef parentObj As Arrays)
+Public Property Set ParentArrays(ByRef parentObj As Arrays)
     Set pParent = parentObj
 End Property
 
